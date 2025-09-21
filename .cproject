@@ -57,6 +57,17 @@
 									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/drivers/peripherals/stm32l0xx-drivers/inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/drivers/utils/inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/drivers/utils/embedded-utils/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/drivers/components/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/drivers/components/ens160-driver/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/drivers/components/sht3x-driver/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/drivers/components/sx126x-driver/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/middleware/analog/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/middleware/power/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/middleware/sigfox/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/middleware/sigfox/sigfox-ep-lib/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/middleware/sigfox/sigfox-ep-addon-rfp/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/middleware/cli/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/application/inc&quot;"/>
 								</option>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.input.806080991" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.input"/>
 							</tool>
@@ -69,6 +80,17 @@
 									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/drivers/peripherals/stm32l0xx-drivers/inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/drivers/utils/inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/drivers/utils/embedded-utils/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/drivers/components/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/drivers/components/ens160-driver/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/drivers/components/sht3x-driver/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/drivers/components/sx126x-driver/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/middleware/analog/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/middleware/power/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/middleware/sigfox/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/middleware/sigfox/sigfox-ep-lib/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/middleware/sigfox/sigfox-ep-addon-rfp/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/middleware/cli/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/application/inc&quot;"/>
 								</option>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.1193421903" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
 							</tool>
