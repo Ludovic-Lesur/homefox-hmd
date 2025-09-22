@@ -69,6 +69,9 @@
 									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/middleware/cli/inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/application/inc&quot;"/>
 								</option>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.assembler.defs.1129824145" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.assembler.defs" valueType="definedSymbols">
+									<listOptionValue builtIn="false" value="HW1_0"/>
+								</option>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.input.806080991" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.input"/>
 							</tool>
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.1460683019" name="GNU Arm Cross C Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler">
@@ -91,6 +94,9 @@
 									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/middleware/sigfox/sigfox-ep-addon-rfp/inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/middleware/cli/inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/application/inc&quot;"/>
+								</option>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs.1781610364" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" valueType="definedSymbols">
+									<listOptionValue builtIn="false" value="HW1_0"/>
 								</option>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.1193421903" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
 							</tool>

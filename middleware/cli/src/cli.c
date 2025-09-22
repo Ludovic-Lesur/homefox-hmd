@@ -27,6 +27,7 @@
 // Components.
 #include "ens160.h"
 #include "sht3x.h"
+#include "sx126x.h"
 // Middleware.
 #include "analog.h"
 #include "power.h"
@@ -53,7 +54,6 @@
 // Enabled commands.
 #define CLI_COMMAND_NVM
 #define CLI_COMMAND_SENSORS
-#define CLI_COMMAND_GPS
 #define CLI_COMMAND_SIGFOX_EP_LIB
 #define CLI_COMMAND_SIGFOX_EP_ADDON_RFP
 #define CLI_COMMAND_CW
@@ -65,6 +65,7 @@
 typedef struct {
     volatile uint8_t at_process_flag;
     PARSER_context_t* at_parser_ptr;
+    uint8_t aqs_running_flag;
 } CLI_context_t;
 
 /*** CLI local functions declaration ***/
@@ -83,11 +84,8 @@ static AT_status_t _CLI_set_ep_key_callback(void);
 #ifdef CLI_COMMAND_SENSORS
 static AT_status_t _CLI_adc_callback(void);
 static AT_status_t _CLI_ths_callback(void);
-static AT_status_t _CLI_acc_callback(void);
-#endif
-/*******************************************************************/
-#ifdef CLI_COMMAND_GPS
-static AT_status_t _CLI_gps_callback(void);
+static AT_status_t _CLI_aqs_read_callback(void);
+static AT_status_t _CLI_aqs_control_callback(void);
 #endif
 /*******************************************************************/
 #ifdef CLI_COMMAND_SIGFOX_EP_LIB
@@ -164,18 +162,16 @@ static const AT_command_t CLI_COMMANDS_LIST[] = {
         .callback = &_CLI_ths_callback
     },
     {
-        .syntax = "$ACC?",
-        .parameters = NULL,
-        .description = "Read accelerometer chip ID",
-        .callback = &_CLI_acc_callback
+        .syntax = "$AQS=",
+        .parameters = "<state[bit]",
+        .description = "Start or stop air quality acquisition",
+        .callback = &_CLI_aqs_control_callback
     },
-#endif
-#ifdef CLI_COMMAND_GPS
     {
-        .syntax = "$GPS=",
-        .parameters = "<timeout[s]>",
-        .description = "Get GPS position",
-        .callback = &_CLI_gps_callback
+        .syntax = "$AQS?",
+        .parameters = NULL,
+        .description = "Read air quality measurements",
+        .callback = &_CLI_aqs_read_callback
     },
 #endif
 #ifdef CLI_COMMAND_SIGFOX_EP_LIB
@@ -228,7 +224,8 @@ static const AT_command_t CLI_COMMANDS_LIST[] = {
 
 static CLI_context_t cli_ctx = {
     .at_process_flag = 0,
-    .at_parser_ptr = NULL
+    .at_parser_ptr = NULL,
+    .aqs_running_flag = 0
 };
 
 /*** CLI local functions ***/
@@ -404,15 +401,8 @@ static AT_status_t _CLI_adc_callback(void) {
     AT_reply_add_string("dC");
     AT_send_reply();
     // Source voltage.
-    AT_reply_add_string("Vsrc=");
-    analog_status = ANALOG_convert_channel(ANALOG_CHANNEL_VSRC_MV, &generic_s32);
-    _CLI_check_driver_status(analog_status, ANALOG_SUCCESS, ERROR_BASE_ANALOG);
-    AT_reply_add_integer(generic_s32, STRING_FORMAT_DECIMAL, 0);
-    AT_reply_add_string("mV");
-    AT_send_reply();
-    // Supercap voltage.
-    AT_reply_add_string("Vstr=");
-    analog_status = ANALOG_convert_channel(ANALOG_CHANNEL_VSTR_MV, &generic_s32);
+    AT_reply_add_string("Vbatt=");
+    analog_status = ANALOG_convert_channel(ANALOG_CHANNEL_VBATT_MV, &generic_s32);
     _CLI_check_driver_status(analog_status, ANALOG_SUCCESS, ERROR_BASE_ANALOG);
     AT_reply_add_integer(generic_s32, STRING_FORMAT_DECIMAL, 0);
     AT_reply_add_string("mV");
@@ -448,6 +438,49 @@ static AT_status_t _CLI_ths_callback(void) {
     AT_reply_add_string("%");
     AT_send_reply();
 errors:
+    if (cli_ctx.aqs_running_flag == 0) {
+        POWER_disable(POWER_REQUESTER_ID_CLI, POWER_DOMAIN_SENSORS);
+    }
+    return status;
+}
+#endif
+
+#ifdef CLI_COMMAND_SENSORS
+/*******************************************************************/
+static AT_status_t _CLI_aqs_control_callback(void) {
+    // Local variables.
+    AT_status_t status = AT_SUCCESS;
+    PARSER_status_t parser_status = PARSER_SUCCESS;
+    SHT3X_status_t sht3x_status = SHT3X_SUCCESS;
+    ENS160_status_t ens160_status = ENS160_SUCCESS;
+    int32_t temperature_degrees = 0;
+    int32_t humidity_percent = 0;
+    int32_t state = 0;
+    // Try parsing downlink request parameter.
+    parser_status = PARSER_get_parameter(cli_ctx.at_parser_ptr, STRING_FORMAT_BOOLEAN, STRING_CHAR_NULL, &state);
+    PARSER_exit_error(AT_ERROR_BASE_PARSER);
+    // Check state.
+    if (state == 0) {
+        // Stop acquisition.
+        ens160_status = ENS160_stop_acquisition(I2C_ADDRESS_ENS160);
+        _CLI_check_driver_status(ens160_status, ENS160_SUCCESS, ERROR_BASE_ENS160);
+        // Turn digital sensors off.
+        POWER_disable(POWER_REQUESTER_ID_CLI, POWER_DOMAIN_SENSORS);
+    }
+    else {
+        // Turn digital sensors on.
+        POWER_enable(POWER_REQUESTER_ID_CLI, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_SLEEP);
+        // Read ambient temperature and humidity.
+        sht3x_status = SHT3X_get_temperature_humidity(I2C_ADDRESS_SHT30, &temperature_degrees, &humidity_percent);
+        _CLI_check_driver_status(sht3x_status, SHT3X_SUCCESS, ERROR_BASE_SHT30);
+        // Start acquisition.
+        ens160_status = ENS160_start_acquisition(I2C_ADDRESS_ENS160, temperature_degrees, humidity_percent);
+        _CLI_check_driver_status(ens160_status, ENS160_SUCCESS, ERROR_BASE_ENS160);
+    }
+    // Update context.
+    cli_ctx.aqs_running_flag = (uint8_t) state;
+    return status;
+errors:
     POWER_disable(POWER_REQUESTER_ID_CLI, POWER_DOMAIN_SENSORS);
     return status;
 }
@@ -455,82 +488,37 @@ errors:
 
 #ifdef CLI_COMMAND_SENSORS
 /*******************************************************************/
-static AT_status_t _CLI_acc_callback(void) {
+static AT_status_t _CLI_aqs_read_callback(void) {
     // Local variables.
     AT_status_t status = AT_SUCCESS;
-    POWER_status_t power_status = POWER_SUCCESS;
-    MMA865XFC_status_t mma865xfc_status = MMA865XFC_SUCCESS;
-    uint8_t chip_id = 0;
-    // Turn digital sensors on.
-    POWER_enable(POWER_REQUESTER_ID_CLI, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_SLEEP);
-    _CLI_check_driver_status(power_status, POWER_SUCCESS, ERROR_BASE_POWER);
-    // Perform measurements.
-    mma865xfc_status = MMA865XFC_get_id(I2C_ADDRESS_MMA8653FC, &chip_id);
-    _CLI_check_driver_status(mma865xfc_status, MMA865XFC_SUCCESS, ERROR_BASE_MMA8653FC);
-    // Read and print data.
-    // Temperature.
-    AT_reply_add_string("MMA8653FC chip_id=");
-    AT_reply_add_integer(chip_id, STRING_FORMAT_HEXADECIMAL, 1);
+    ENS160_status_t ens160_status = ENS160_SUCCESS;
+    int32_t aqi_uba = 0;
+    int32_t tvoc_ppb = 0;
+    int32_t eco2_ppm = 0;
+    // Check if acquisition is running.
+    if (cli_ctx.aqs_running_flag == 0) {
+        status = AT_ERROR_COMMAND_EXECUTION;
+        goto errors;
+    }
+    // Read air quality data.
+    ens160_status = ENS160_read_air_quality(I2C_ADDRESS_ENS160, &aqi_uba, &tvoc_ppb, &eco2_ppm);
+    _CLI_check_driver_status(ens160_status, ENS160_SUCCESS, ERROR_BASE_ENS160);
+    // Print data.
+    // Air quality index.
+    AT_reply_add_string("AQI=");
+    AT_reply_add_integer(aqi_uba, STRING_FORMAT_DECIMAL, 0);
+    AT_send_reply();
+    // TVOC.
+    AT_reply_add_string("TVOC=");
+    AT_reply_add_integer(tvoc_ppb, STRING_FORMAT_DECIMAL, 0);
+    AT_reply_add_string("ppb");
+    AT_send_reply();
+    // ECO2.
+    AT_reply_add_string("ECO2=");
+    AT_reply_add_integer(eco2_ppm, STRING_FORMAT_DECIMAL, 0);
+    AT_reply_add_string("ppm");
     AT_send_reply();
 errors:
-    POWER_disable(POWER_REQUESTER_ID_CLI, POWER_DOMAIN_SENSORS);
-    return status;
-}
-#endif
-
-#ifdef CLI_COMMAND_GPS
-/*******************************************************************/
-static AT_status_t _CLI_gps_callback(void) {
-    // Local variables.
-    AT_status_t status = AT_SUCCESS;
-    PARSER_status_t parser_status = PARSER_SUCCESS;
-    GPS_status_t gps_status = GPS_SUCCESS;
-    GPS_position_t gps_position;
-    GPS_acquisition_status_t acquisition_status = GPS_ACQUISITION_ERROR_LAST;
-    int32_t timeout_seconds = 0;
-    uint32_t fix_duration_seconds = 0;
-    // Read timeout parameter.
-    parser_status = PARSER_get_parameter(cli_ctx.at_parser_ptr, STRING_FORMAT_DECIMAL, STRING_CHAR_NULL, &timeout_seconds);
-    PARSER_exit_error(AT_ERROR_BASE_PARSER);
-    // Turn GPS and analog front-end to monitor storage element voltage.
-    POWER_enable(POWER_REQUESTER_ID_CLI, POWER_DOMAIN_ANALOG, LPTIM_DELAY_MODE_SLEEP);
-    POWER_enable(POWER_REQUESTER_ID_CLI, POWER_DOMAIN_GPS, LPTIM_DELAY_MODE_SLEEP);
-    // Perform time acquisition.
-    gps_status = GPS_get_position(&gps_position, 0, (uint32_t) timeout_seconds, &fix_duration_seconds, &acquisition_status);
-    _CLI_check_driver_status(gps_status, GPS_SUCCESS, ERROR_BASE_GPS);
-    // Check status.
-    if (acquisition_status == GPS_ACQUISITION_SUCCESS) {
-        // Latitude.
-        AT_reply_add_integer((gps_position.lat_degrees), STRING_FORMAT_DECIMAL, 0);
-        AT_reply_add_string("d");
-        AT_reply_add_integer((gps_position.lat_minutes), STRING_FORMAT_DECIMAL, 0);
-        AT_reply_add_string("'");
-        AT_reply_add_integer((gps_position.lat_seconds), STRING_FORMAT_DECIMAL, 0);
-        AT_reply_add_string("''");
-        AT_reply_add_string(((gps_position.lat_north_flag) == 0) ? "S" : "N");
-        // Longitude.
-        AT_reply_add_string(":");
-        AT_reply_add_integer((gps_position.long_degrees), STRING_FORMAT_DECIMAL, 0);
-        AT_reply_add_string("d");
-        AT_reply_add_integer((gps_position.long_minutes), STRING_FORMAT_DECIMAL, 0);
-        AT_reply_add_string("'");
-        AT_reply_add_integer((gps_position.long_seconds), STRING_FORMAT_DECIMAL, 0);
-        AT_reply_add_string("''");
-        AT_reply_add_string(((gps_position.long_east_flag) == 0) ? "W" : "E");
-        // Altitude.
-        AT_reply_add_string(":");
-        AT_reply_add_integer((gps_position.altitude), STRING_FORMAT_DECIMAL, 0);
-        AT_reply_add_string("m:");
-    }
-    else {
-        AT_reply_add_string("TIMEOUT:");
-    }
-    AT_reply_add_integer((int32_t) fix_duration_seconds, STRING_FORMAT_DECIMAL, 0);
-    AT_reply_add_string("s");
-    AT_send_reply();
-errors:
-    POWER_disable(POWER_REQUESTER_ID_CLI, POWER_DOMAIN_GPS);
-    POWER_disable(POWER_REQUESTER_ID_CLI, POWER_DOMAIN_ANALOG);
     return status;
 }
 #endif
@@ -846,7 +834,7 @@ static AT_status_t _CLI_rssi_callback(void) {
     AT_status_t status = AT_SUCCESS;
     PARSER_status_t parser_status = PARSER_SUCCESS;
     RF_API_status_t rf_api_status = RF_API_SUCCESS;
-    S2LP_status_t s2lp_status = S2LP_SUCCESS;
+    SX126X_status_t sx126x_status = SX126X_SUCCESS;
     LPTIM_status_t lptim_status = LPTIM_SUCCESS;
     RF_API_radio_parameters_t radio_params;
     int32_t frequency_hz = 0;
@@ -872,17 +860,13 @@ static AT_status_t _CLI_rssi_callback(void) {
     rf_api_status = RF_API_init(&radio_params);
     _CLI_check_driver_status(rf_api_status, RF_API_SUCCESS, (ERROR_BASE_SIGFOX_EP_LIB + (SIGFOX_ERROR_SOURCE_RF_API * ERROR_BASE_STEP)));
     // Start continuous listening.
-    s2lp_status = S2LP_send_command(S2LP_COMMAND_READY);
-    _CLI_check_driver_status(s2lp_status, S2LP_SUCCESS, ERROR_BASE_S2LP);
-    s2lp_status = S2LP_wait_for_state(S2LP_STATE_READY);
-    _CLI_check_driver_status(s2lp_status, S2LP_SUCCESS, ERROR_BASE_S2LP);
-    s2lp_status = S2LP_send_command(S2LP_COMMAND_RX);
-    _CLI_check_driver_status(s2lp_status, S2LP_SUCCESS, ERROR_BASE_S2LP);
+    sx126x_status = SX126X_set_mode(SX126X_MODE_RX);
+    _CLI_check_driver_status(sx126x_status, SX126X_SUCCESS, ERROR_BASE_SX1261);
     // Measurement loop.
     while (report_loop < ((uint32_t) ((duration_seconds * 1000) / CLI_RSSI_REPORT_PERIOD_MS))) {
         // Read RSSI.
-        s2lp_status = S2LP_get_rssi(S2LP_RSSI_TYPE_RUN, &rssi_dbm);
-        _CLI_check_driver_status(s2lp_status, S2LP_SUCCESS, ERROR_BASE_S2LP);
+        sx126x_status = SX126X_get_rssi(SX126X_RSSI_TYPE_INSTANTANEOUS, &rssi_dbm);
+        _CLI_check_driver_status(sx126x_status, SX126X_SUCCESS, ERROR_BASE_SX1261);
         // Print RSSI.
         AT_reply_add_integer(rssi_dbm, STRING_FORMAT_DECIMAL, 0);
         AT_reply_add_string("dBm");

@@ -8,11 +8,35 @@
 #ifndef __EMBEDDED_UTILS_FLAGS_H__
 #define __EMBEDDED_UTILS_FLAGS_H__
 
+#include "hmd_flags.h"
+#include "version.h"
+
 /*** Embedded utility functions compilation flags ***/
 
 #define EMBEDDED_UTILS_HW_INTERFACE_ERROR_BASE_LAST     0
 
+#ifdef HMD_MODE_CLI
+#define EMBEDDED_UTILS_AT_BAUD_RATE                     9600
+#define EMBEDDED_UTILS_AT_REPLY_END                     "\r\n"
+#define EMBEDDED_UTILS_AT_FORCE_OK
+#define EMBEDDED_UTILS_AT_INTERNAL_COMMANDS_ENABLE
+#define EMBEDDED_UTILS_AT_COMMANDS_LIST_SIZE            32
+#define EMBEDDED_UTILS_AT_BUFFER_SIZE                   64
+#ifdef EMBEDDED_UTILS_AT_INTERNAL_COMMANDS_ENABLE
+#define EMBEDDED_UTILS_AT_BOARD_NAME                    "hmd"
+#ifdef HW1_0
+#define EMBEDDED_UTILS_AT_HW_VERSION_MAJOR              1
+#define EMBEDDED_UTILS_AT_HW_VERSION_MINOR              0
+#endif
+#define EMBEDDED_UTILS_AT_SW_VERSION_MAJOR              GIT_MAJOR_VERSION
+#define EMBEDDED_UTILS_AT_SW_VERSION_MINOR              GIT_MINOR_VERSION
+#define EMBEDDED_UTILS_AT_SW_VERSION_INDEX              GIT_COMMIT_INDEX
+#define EMBEDDED_UTILS_AT_SW_VERSION_DIRTY_FLAG         GIT_DIRTY_FLAG
+#define EMBEDDED_UTILS_AT_SW_VERSION_ID                 GIT_COMMIT_ID
+#endif
+#else
 #define EMBEDDED_UTILS_AT_DRIVER_DISABLE
+#endif
 
 #define EMBEDDED_UTILS_ERROR_STACK_DEPTH                32
 #define EMBEDDED_UTILS_ERROR_STACK_SUCCESS_VALUE        0
