@@ -7,11 +7,15 @@
 
 #include "sx126x_hw.h"
 
+#ifndef SX126X_DRIVER_DISABLE_FLAGS_FILE
+#include "sx126x_driver_flags.h"
+#endif
 #include "error.h"
 #include "error_base.h"
 #include "gpio.h"
 #include "mcu_mapping.h"
 #include "spi.h"
+#include "sx126x.h"
 #include "types.h"
 
 #ifndef SX126X_DRIVER_DISABLE

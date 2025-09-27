@@ -7,10 +7,16 @@
 
 #include "ens160_hw.h"
 
-#include "error_base.h"
-#include "sensors_hw.h"
+#ifndef ENS160_DRIVER_DISABLE_FLAGS_FILE
+#include "ens160_driver_flags.h"
+#endif
 
 #ifndef ENS160_DRIVER_DISABLE
+
+#include "ens160.h"
+#include "error_base.h"
+#include "sensors_hw.h"
+#include "types.h"
 
 /*** ENS160 HW functions ***/
 
