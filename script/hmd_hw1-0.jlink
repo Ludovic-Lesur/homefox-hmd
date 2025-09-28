@@ -1,0 +1,6 @@
+r
+loadfile hw1-0/hmd.hex
+verifyfile hw1-0/hmd.hex
+r
+g
+qc
