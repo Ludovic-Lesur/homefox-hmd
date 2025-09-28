@@ -14,6 +14,7 @@
 #include "gpio.h"
 #include "lptim.h"
 #include "mcu_mapping.h"
+#include "rfe.h"
 #include "sht3x.h"
 #include "sx126x.h"
 #include "types.h"
@@ -56,6 +57,7 @@ void POWER_enable(POWER_requester_id_t requester_id, POWER_domain_t domain, LPTI
     ENS160_status_t ens160_status = ENS160_SUCCESS;
     SHT3X_status_t sht3x_status = SHT3X_SUCCESS;
     SX126X_status_t sx126x_status = SX126X_SUCCESS;
+    RFE_status_t rfe_status = RFE_SUCCESS;
     LPTIM_status_t lptim_status = LPTIM_SUCCESS;
     uint32_t delay_ms = 0;
     uint8_t action_required = 0;
@@ -105,6 +107,8 @@ void POWER_enable(POWER_requester_id_t requester_id, POWER_domain_t domain, LPTI
         // Init attached drivers.
         sx126x_status = SX126X_init();
         _POWER_stack_driver_error(sx126x_status, SX126X_SUCCESS, ERROR_BASE_SX1261, POWER_ERROR_DRIVER_SX126X);
+        rfe_status = RFE_init();
+        _POWER_stack_driver_error(rfe_status, RFE_SUCCESS, ERROR_BASE_RFE, POWER_ERROR_DRIVER_RFE);
         break;
     default:
         ERROR_stack_add(ERROR_BASE_POWER + POWER_ERROR_DOMAIN);
@@ -126,6 +130,7 @@ void POWER_disable(POWER_requester_id_t requester_id, POWER_domain_t domain) {
     ENS160_status_t ens160_status = ENS160_SUCCESS;
     SHT3X_status_t sht3x_status = SHT3X_SUCCESS;
     SX126X_status_t sx126x_status = SX126X_SUCCESS;
+    RFE_status_t rfe_status = RFE_SUCCESS;
     // Check parameters.
     if (requester_id >= POWER_REQUESTER_ID_LAST) {
         ERROR_stack_add(ERROR_BASE_POWER + POWER_ERROR_REQUESTER_ID);
@@ -164,6 +169,8 @@ void POWER_disable(POWER_requester_id_t requester_id, POWER_domain_t domain) {
         break;
     case POWER_DOMAIN_RADIO:
         // Release attached drivers.
+        rfe_status = RFE_de_init();
+        _POWER_stack_driver_error(rfe_status, RFE_SUCCESS, ERROR_BASE_RFE, POWER_ERROR_DRIVER_RFE);
         sx126x_status = SX126X_de_init();
         _POWER_stack_driver_error(sx126x_status, SX126X_SUCCESS, ERROR_BASE_SX1261, POWER_ERROR_DRIVER_SX126X);
         // Turn radio off.

@@ -21,6 +21,7 @@ typedef enum {
     // Sensor.
     NVIC_PRIORITY_SENSOR = 0,
     // Sigfox.
+    NVIC_PRIORITY_SIGFOX_RADIO_IRQ_GPIO = 0,
     NVIC_PRIORITY_SIGFOX_TIMER = 1,
     // AT interface.
     NVIC_PRIORITY_AT = 3

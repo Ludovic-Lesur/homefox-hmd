@@ -28,6 +28,9 @@
 #include "analog.h"
 #include "cli.h"
 #include "power.h"
+#include "rfe.h"
+#include "sigfox_ep_addon_rfp_api.h"
+#include "sigfox_ep_api.h"
 // Sigfox.
 #include "sigfox_error.h"
 
@@ -59,7 +62,8 @@ typedef enum {
     ERROR_BASE_ANALOG = (ERROR_BASE_SX1261 + SX126X_ERROR_BASE_LAST),
     ERROR_BASE_CLI = (ERROR_BASE_ANALOG + ANALOG_ERROR_BASE_LAST),
     ERROR_BASE_POWER = (ERROR_BASE_CLI + CLI_ERROR_BASE_LAST),
-    ERROR_BASE_SIGFOX_EP_LIB = (ERROR_BASE_POWER + POWER_ERROR_BASE_LAST),
+    ERROR_BASE_RFE = (ERROR_BASE_POWER + POWER_ERROR_BASE_LAST),
+    ERROR_BASE_SIGFOX_EP_LIB = (ERROR_BASE_RFE + RFE_ERROR_BASE_LAST),
     ERROR_BASE_SIGFOX_EP_ADDON_RFP = (ERROR_BASE_SIGFOX_EP_LIB + (SIGFOX_ERROR_SOURCE_LAST * ERROR_BASE_STEP)),
     // Last base value.
     ERROR_BASE_LAST = (ERROR_BASE_SIGFOX_EP_ADDON_RFP + ERROR_BASE_STEP)
