@@ -533,13 +533,17 @@ RF_API_status_t RF_API_carrier_sense(RF_API_carrier_sense_parameters_t *carrier_
 RF_API_status_t RF_API_get_latency(RF_API_latency_t latency_type, sfx_u32* latency_ms) {
     // Local variables.
     RF_API_status_t status = RF_API_SUCCESS;
+#ifdef SIGFOX_EP_PARAMETERS_CHECK
     // Check parameter.
     if (latency_type >= RF_API_LATENCY_LAST) {
         SIGFOX_EXIT_ERROR((RF_API_status_t) RF_API_ERROR_LATENCY_TYPE);
     }
+#endif
     // Set latency.
     (*latency_ms) = RF_API_LATENCY_MS[latency_type];
+#ifdef SIGFOX_EP_PARAMETERS_CHECK
 errors:
+#endif
     SIGFOX_RETURN();
 }
 #endif
