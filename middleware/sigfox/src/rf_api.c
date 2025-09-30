@@ -96,11 +96,11 @@ typedef enum {
 
 /*******************************************************************/
 typedef union {
+    sfx_u8 all;
     struct {
         unsigned dio_irq_enable :1;
         unsigned dio_irq_flag :1;
-    } field;
-    sfx_u8 all;
+    } __attribute__((scalar_storage_order("big-endian"))) __attribute__((packed));
 } RF_API_flags_t;
 
 /*******************************************************************/
@@ -140,7 +140,7 @@ static RF_API_context_t rf_api_ctx;
 /*******************************************************************/
 static void _RF_API_sx126x_dio_irq_callback(void) {
     // Set flag if IRQ is enabled.
-    rf_api_ctx.flags.field.dio_irq_flag = rf_api_ctx.flags.field.dio_irq_enable;
+    rf_api_ctx.flags.dio_irq_flag = rf_api_ctx.flags.dio_irq_enable;
 }
 
 /*******************************************************************/
@@ -155,7 +155,7 @@ static RF_API_status_t _RF_API_enable_sx126x_dio_irq(sfx_u16 irq_mask) {
     EXTI_configure_gpio(&GPIO_SX1261_DIO1, GPIO_PULL_NONE, EXTI_TRIGGER_RISING_EDGE, &_RF_API_sx126x_dio_irq_callback, NVIC_PRIORITY_SIGFOX_RADIO_IRQ_GPIO);
     EXTI_clear_gpio_flag(&GPIO_SX1261_DIO1);
     // Enable interrupt.
-    rf_api_ctx.flags.field.dio_irq_enable = 1;
+    rf_api_ctx.flags.dio_irq_enable = 1;
     EXTI_enable_gpio_interrupt(&GPIO_SX1261_DIO1);
 errors:
     return status;
@@ -169,7 +169,7 @@ static void _RF_API_disable_sx126x_dio_irq(void) {
     sx126x_status = SX126X_set_dio_irq_mask(0, 0, 0, 0);
     SX126X_stack_error(ERROR_BASE_SX1261);
     // Disable GPIO interrupt.
-    rf_api_ctx.flags.field.dio_irq_enable = 0;
+    rf_api_ctx.flags.dio_irq_enable = 0;
     EXTI_disable_gpio_interrupt(&GPIO_SX1261_DIO1);
     EXTI_release_gpio(&GPIO_SX1261_DIO1, GPIO_MODE_INPUT);
 }
@@ -417,7 +417,7 @@ RF_API_status_t RF_API_send(RF_API_tx_data_t* tx_data) {
     sx126x_status = SX126X_set_mode(SX126X_MODE_TX);
     SX126X_stack_exit_error(ERROR_BASE_SX1261, (RF_API_status_t) RF_API_ERROR_DRIVER_SX126X);
     // Wait for transmission to complete.
-    while (rf_api_ctx.flags.field.dio_irq_flag == 0) {
+    while (rf_api_ctx.flags.dio_irq_flag == 0) {
         // Enter sleep mode.
         PWR_enter_sleep_mode(PWR_SLEEP_MODE_NORMAL);
         // Check timer.
@@ -460,7 +460,7 @@ RF_API_status_t RF_API_receive(RF_API_rx_data_t* rx_data) {
     sx126x_status = SX126X_set_mode(SX126X_MODE_RX);
     SX126X_stack_exit_error(ERROR_BASE_SX1261, (RF_API_status_t) RF_API_ERROR_DRIVER_SX126X);
     // Wait for GPIO interrupt.
-    while (rf_api_ctx.flags.field.dio_irq_flag == 0) {
+    while (rf_api_ctx.flags.dio_irq_flag == 0) {
         // Enter sleep mode.
         PWR_enter_sleep_mode(PWR_SLEEP_MODE_NORMAL);
         IWDG_reload();
