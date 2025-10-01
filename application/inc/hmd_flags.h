@@ -14,6 +14,5 @@
 
 //#define HMD_MODE_CLI
 //#define HMD_MODE_DEBUG
-//#define HMD_MODE_ENS160_CALIBRATION
 
 #endif /* __HMD_FLAGS_H__ */

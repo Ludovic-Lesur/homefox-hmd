@@ -16,6 +16,7 @@
 #include "nvm_address.h"
 #include "pwr.h"
 #include "rcc.h"
+#include "rtc.h"
 // Utils.
 #include "at.h"
 #include "error.h"
@@ -33,6 +34,7 @@
 #include "power.h"
 // Sigfox.
 #include "manuf/rf_api.h"
+#include "rfe.h"
 #include "sigfox_ep_addon_rfp_api.h"
 #include "sigfox_ep_api.h"
 #include "sigfox_error.h"
@@ -65,7 +67,11 @@
 typedef struct {
     volatile uint8_t at_process_flag;
     PARSER_context_t* at_parser_ptr;
+#ifdef CLI_COMMAND_SENSORS
     uint8_t aqs_running_flag;
+    uint32_t aqs_start_time;
+    uint32_t aqs_operating_time;
+#endif
 } CLI_context_t;
 
 /*** CLI local functions declaration ***/
@@ -86,6 +92,7 @@ static AT_status_t _CLI_adc_callback(void);
 static AT_status_t _CLI_ths_callback(void);
 static AT_status_t _CLI_aqs_read_callback(void);
 static AT_status_t _CLI_aqs_control_callback(void);
+static AT_status_t _CLI_aqs_status_callback(void);
 #endif
 /*******************************************************************/
 #ifdef CLI_COMMAND_SIGFOX_EP_LIB
@@ -168,6 +175,12 @@ static const AT_command_t CLI_COMMANDS_LIST[] = {
         .callback = &_CLI_aqs_control_callback
     },
     {
+        .syntax = "$AQST?",
+        .parameters = NULL,
+        .description = "Read air quality status",
+        .callback = &_CLI_aqs_status_callback
+    },
+    {
         .syntax = "$AQS?",
         .parameters = NULL,
         .description = "Read air quality measurements",
@@ -225,7 +238,11 @@ static const AT_command_t CLI_COMMANDS_LIST[] = {
 static CLI_context_t cli_ctx = {
     .at_process_flag = 0,
     .at_parser_ptr = NULL,
-    .aqs_running_flag = 0
+#ifdef CLI_COMMAND_SENSORS
+    .aqs_running_flag = 0,
+    .aqs_start_time = 0,
+    .aqs_operating_time = 0,
+#endif
 };
 
 /*** CLI local functions ***/
@@ -466,6 +483,8 @@ static AT_status_t _CLI_aqs_control_callback(void) {
         _CLI_check_driver_status(ens160_status, ENS160_SUCCESS, ERROR_BASE_ENS160);
         // Turn digital sensors off.
         POWER_disable(POWER_REQUESTER_ID_CLI, POWER_DOMAIN_SENSORS);
+        // Reset operating time.
+        cli_ctx.aqs_operating_time = 0;
     }
     else {
         // Turn digital sensors on.
@@ -476,12 +495,48 @@ static AT_status_t _CLI_aqs_control_callback(void) {
         // Start acquisition.
         ens160_status = ENS160_start_acquisition(I2C_ADDRESS_ENS160, temperature_degrees, humidity_percent);
         _CLI_check_driver_status(ens160_status, ENS160_SUCCESS, ERROR_BASE_ENS160);
+        // Update start time if needed.
+        if (cli_ctx.aqs_running_flag == 0) {
+            cli_ctx.aqs_start_time = RTC_get_uptime_seconds();
+            cli_ctx.aqs_operating_time = 0;
+        }
     }
     // Update context.
     cli_ctx.aqs_running_flag = (uint8_t) state;
     return status;
 errors:
     POWER_disable(POWER_REQUESTER_ID_CLI, POWER_DOMAIN_SENSORS);
+    return status;
+}
+#endif
+
+#ifdef CLI_COMMAND_SENSORS
+/*******************************************************************/
+static AT_status_t _CLI_aqs_status_callback(void) {
+    // Local variables.
+    AT_status_t status = AT_SUCCESS;
+    ENS160_status_t ens160_status = ENS160_SUCCESS;
+    ENS160_device_status_t ens160_device_status;
+    // Check if acquisition is running.
+    if (cli_ctx.aqs_running_flag == 0) {
+        status = AT_ERROR_COMMAND_EXECUTION;
+        goto errors;
+    }
+    // Read air quality data.
+    ens160_status = ENS160_get_device_status(I2C_ADDRESS_ENS160, &ens160_device_status);
+    _CLI_check_driver_status(ens160_status, ENS160_SUCCESS, ERROR_BASE_ENS160);
+    // Print status.
+    AT_reply_add_string("status=");
+    AT_reply_add_integer((ens160_device_status.all), STRING_FORMAT_HEXADECIMAL, 1);
+    AT_reply_add_string(" (validity_flag=");
+    AT_reply_add_integer((ens160_device_status.validity_flag), STRING_FORMAT_DECIMAL, 0);
+    AT_reply_add_string(")");
+    AT_send_reply();
+    AT_reply_add_string("operating_time=");
+    AT_reply_add_integer(cli_ctx.aqs_operating_time, STRING_FORMAT_DECIMAL, 0);
+    AT_reply_add_string("s.");
+    AT_send_reply();
+errors:
     return status;
 }
 #endif
@@ -835,6 +890,7 @@ static AT_status_t _CLI_rssi_callback(void) {
     PARSER_status_t parser_status = PARSER_SUCCESS;
     RF_API_status_t rf_api_status = RF_API_SUCCESS;
     SX126X_status_t sx126x_status = SX126X_SUCCESS;
+    RFE_status_t rfe_status = RFE_SUCCESS;
     LPTIM_status_t lptim_status = LPTIM_SUCCESS;
     RF_API_radio_parameters_t radio_params;
     int32_t frequency_hz = 0;
@@ -865,8 +921,8 @@ static AT_status_t _CLI_rssi_callback(void) {
     // Measurement loop.
     while (report_loop < ((uint32_t) ((duration_seconds * 1000) / CLI_RSSI_REPORT_PERIOD_MS))) {
         // Read RSSI.
-        sx126x_status = SX126X_get_rssi(SX126X_RSSI_TYPE_INSTANTANEOUS, &rssi_dbm);
-        _CLI_check_driver_status(sx126x_status, SX126X_SUCCESS, ERROR_BASE_SX1261);
+        rfe_status = RFE_get_rssi(SX126X_RSSI_TYPE_INSTANTANEOUS, &rssi_dbm);
+        _CLI_check_driver_status(rfe_status, RFE_SUCCESS, ERROR_BASE_RFE);
         // Print RSSI.
         AT_reply_add_integer(rssi_dbm, STRING_FORMAT_DECIMAL, 0);
         AT_reply_add_string("dBm");
@@ -948,6 +1004,11 @@ CLI_status_t CLI_process(void) {
         at_status = AT_process();
         AT_exit_error(CLI_ERROR_BASE_AT);
     }
+#ifdef CLI_COMMAND_SENSORS
+    if (cli_ctx.aqs_running_flag != 0) {
+        cli_ctx.aqs_operating_time = (RTC_get_uptime_seconds() -  cli_ctx.aqs_start_time);
+    }
+#endif
 errors:
     return status;
 }

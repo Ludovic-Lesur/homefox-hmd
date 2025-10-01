@@ -19,6 +19,8 @@
 // Utils.
 #include "error.h"
 #include "types.h"
+// Components.
+#include "led.h"
 // Middleware
 #include "cli.h"
 // Applicative.
@@ -41,6 +43,7 @@ static void _HMD_init_hw(void) {
 #ifndef HMD_MODE_DEBUG
     IWDG_status_t iwdg_status = IWDG_SUCCESS;
 #endif
+    LED_status_t led_status = LED_SUCCESS;
     // Init error stack
     ERROR_stack_init();
     // Init memory.
@@ -71,6 +74,9 @@ static void _HMD_init_hw(void) {
     // Init delay timer.
     lptim_status = LPTIM_init(NVIC_PRIORITY_DELAY);
     LPTIM_stack_error(ERROR_BASE_LPTIM);
+    // Init RGB LED.
+    led_status = LED_init();
+    LED_stack_error(ERROR_BASE_LED);
 }
 
 /*** MAIN functions ***/
