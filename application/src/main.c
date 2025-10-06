@@ -30,6 +30,11 @@
 /*** MAIN local functions ***/
 
 /*******************************************************************/
+static void _HMD_button_irq_callback(void) {
+    // TODO
+}
+
+/*******************************************************************/
 static void _HMD_rtc_wakeup_timer_irq_callback(void) {
     // TODO
 }
@@ -43,6 +48,7 @@ static void _HMD_init_hw(void) {
 #ifndef HMD_MODE_DEBUG
     IWDG_status_t iwdg_status = IWDG_SUCCESS;
 #endif
+    BUTTON_status_t button_status = BUTTON_SUCCESS;
     LED_status_t led_status = LED_SUCCESS;
     // Init error stack
     ERROR_stack_init();
@@ -74,7 +80,9 @@ static void _HMD_init_hw(void) {
     // Init delay timer.
     lptim_status = LPTIM_init(NVIC_PRIORITY_DELAY);
     LPTIM_stack_error(ERROR_BASE_LPTIM);
-    // Init RGB LED.
+    // Init HMI.
+    button_status = BUTTON_init(&_HMD_button_irq_callback);
+    BUTTON_stack_error(ERROR_BASE_BUTTON);
     led_status = LED_init();
     LED_stack_error(ERROR_BASE_LED);
 }

@@ -16,6 +16,7 @@ typedef enum {
     // Common.
     NVIC_PRIORITY_CLOCK = 0,
     NVIC_PRIORITY_CLOCK_CALIBRATION = 1,
+    NVIC_PRIORITY_BUTTON = 2,
     NVIC_PRIORITY_DELAY = 2,
     NVIC_PRIORITY_RTC = 3,
     // Sensor.
