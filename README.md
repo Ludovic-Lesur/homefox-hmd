@@ -24,7 +24,7 @@ The embedded software is developed under **Eclipse IDE** version 2024-09 (4.33.0
 
 ## Target
 
-The board is based on the **STM32L041K6U6** microcontroller of the STMicroelectronics L0 family. Each hardware revision has a corresponding **build configuration** in the Eclipse project, which sets up the code for the selected board version.
+The board is based on the **STM32L051K8U6** microcontroller of the STMicroelectronics L0 family. Each hardware revision has a corresponding **build configuration** in the Eclipse project, which sets up the code for the selected board version.
 
 ## Structure
 

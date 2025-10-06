@@ -27,8 +27,8 @@ static const GPIO_pin_t GPIO_SPI1_SCK = { GPIOA, 0, 5, 0 };
 static const GPIO_pin_t GPIO_SPI1_MISO = { GPIOA, 0, 6, 0 };
 static const GPIO_pin_t GPIO_SPI1_MOSI = { GPIOA, 0, 7, 0 };
 // USART2.
-static const GPIO_pin_t GPIO_USART2_TX = { GPIOA, 0, 9, 4 };
-static const GPIO_pin_t GPIO_USART2_RX = { GPIOA, 0, 10, 4 };
+static const GPIO_pin_t GPIO_USART1_TX = { GPIOA, 0, 9, 4 };
+static const GPIO_pin_t GPIO_USART1_RX = { GPIOA, 0, 10, 4 };
 
 /*** GPIO MAPPING global variables ***/
 
@@ -54,7 +54,7 @@ const GPIO_pin_t GPIO_SENSORS_POWER_ENABLE = { GPIOB, 1, 3, 0 };
 const I2C_gpio_t I2C_GPIO_SENSORS = { &GPIO_I2C1_SCL, &GPIO_I2C1_SDA };
 const GPIO_pin_t GPIO_SENSOR_IRQ = { GPIOA, 0, 0, 0 };
 // AT interface.
-const USART_gpio_t USART_GPIO_AT = { &GPIO_USART2_TX, &GPIO_USART2_RX };
+const USART_gpio_t USART_GPIO_AT = { &GPIO_USART1_TX, &GPIO_USART1_RX };
 // RGB LED
 const GPIO_pin_t GPIO_LED_RED = { GPIOB, 1, 4, 0 };
 const GPIO_pin_t GPIO_LED_GREEN = { GPIOB, 1, 8, 0 };
