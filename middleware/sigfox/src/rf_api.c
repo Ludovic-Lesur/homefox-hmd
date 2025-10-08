@@ -267,20 +267,22 @@ RF_API_status_t RF_API_init(RF_API_radio_parameters_t* radio_parameters) {
 #else
     modulation_parameters.fsk_deviation_hz = 0;
 #endif
-    modulation_parameters.bit_rate_bps = (radio_parameters->bit_rate_bps);
     modulation_parameters.rx_bandwidth = SX126X_RXBW_4800HZ;
     // Modulation parameters.
     switch (radio_parameters->modulation) {
     case RF_API_MODULATION_NONE:
+        modulation_parameters.bit_rate_bps = 100;
         modulation_parameters.modulation = SX126X_MODULATION_GFSK;
         modulation_parameters.modulation_shaping = SX126X_MODULATION_SHAPING_NONE;
         break;
     case RF_API_MODULATION_DBPSK:
+        modulation_parameters.bit_rate_bps = (radio_parameters->bit_rate_bps);
         modulation_parameters.modulation = SX126X_MODULATION_BPSK;
         modulation_parameters.modulation_shaping = SX126X_MODULATION_SHAPING_DBPSK;
 
         break;
     case RF_API_MODULATION_GFSK:
+        modulation_parameters.bit_rate_bps = (radio_parameters->bit_rate_bps);
         modulation_parameters.modulation = SX126X_MODULATION_GFSK;
         modulation_parameters.modulation_shaping = SX126X_MODULATION_SHAPING_GAUSSIAN_BT_1;
         break;
