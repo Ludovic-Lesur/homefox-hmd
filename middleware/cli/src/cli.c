@@ -90,9 +90,11 @@ static AT_status_t _CLI_set_ep_key_callback(void);
 #ifdef CLI_COMMAND_SENSORS
 static AT_status_t _CLI_adc_callback(void);
 static AT_status_t _CLI_ths_callback(void);
+#ifdef HMD_AIR_QUALITY_ENABLE
 static AT_status_t _CLI_aqs_read_callback(void);
 static AT_status_t _CLI_aqs_control_callback(void);
 static AT_status_t _CLI_aqs_status_callback(void);
+#endif
 #endif
 /*******************************************************************/
 #ifdef CLI_COMMAND_SIGFOX_EP_LIB
@@ -168,6 +170,7 @@ static const AT_command_t CLI_COMMANDS_LIST[] = {
         .description = "Read temperature and humidity",
         .callback = &_CLI_ths_callback
     },
+#ifdef HMD_AIR_QUALITY_ENABLE
     {
         .syntax = "$AQS=",
         .parameters = "<state[bit]",
@@ -186,6 +189,7 @@ static const AT_command_t CLI_COMMANDS_LIST[] = {
         .description = "Read air quality measurements",
         .callback = &_CLI_aqs_read_callback
     },
+#endif
 #endif
 #ifdef CLI_COMMAND_SIGFOX_EP_LIB
 #ifdef SIGFOX_EP_CONTROL_KEEP_ALIVE_MESSAGE
@@ -462,7 +466,7 @@ errors:
 }
 #endif
 
-#ifdef CLI_COMMAND_SENSORS
+#if ((defined CLI_COMMAND_SENSORS) && (defined HMD_AIR_QUALITY_ENABLE))
 /*******************************************************************/
 static AT_status_t _CLI_aqs_control_callback(void) {
     // Local variables.
@@ -510,7 +514,7 @@ errors:
 }
 #endif
 
-#ifdef CLI_COMMAND_SENSORS
+#if ((defined CLI_COMMAND_SENSORS) && (defined HMD_AIR_QUALITY_ENABLE))
 /*******************************************************************/
 static AT_status_t _CLI_aqs_status_callback(void) {
     // Local variables.
@@ -541,7 +545,7 @@ errors:
 }
 #endif
 
-#ifdef CLI_COMMAND_SENSORS
+#if ((defined CLI_COMMAND_SENSORS) && (defined HMD_AIR_QUALITY_ENABLE))
 /*******************************************************************/
 static AT_status_t _CLI_aqs_read_callback(void) {
     // Local variables.
