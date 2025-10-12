@@ -22,7 +22,7 @@
 #include "terminal.h"
 // Components.
 #include "button.h"
-#include "ens160.h"
+#include "ens16x.h"
 #include "led.h"
 #include "sht3x.h"
 #include "sx126x.h"
@@ -59,7 +59,7 @@ typedef enum {
     // Components.
     ERROR_BASE_BUTTON = (ERROR_BASE_TERMINAL_AT + TERMINAL_ERROR_BASE_LAST),
     ERROR_BASE_ENS160 = (ERROR_BASE_BUTTON + BUTTON_ERROR_BASE_LAST),
-    ERROR_BASE_LED = (ERROR_BASE_ENS160 + ENS160_ERROR_BASE_LAST),
+    ERROR_BASE_LED = (ERROR_BASE_ENS160 + ENS16X_ERROR_BASE_LAST),
     ERROR_BASE_SHT30 = (ERROR_BASE_LED + LED_ERROR_BASE_LAST),
     ERROR_BASE_SX1261 = (ERROR_BASE_SHT30 + SHT3X_ERROR_BASE_LAST),
     // Middleware.

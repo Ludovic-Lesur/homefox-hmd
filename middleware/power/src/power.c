@@ -8,7 +8,7 @@
 #include "power.h"
 
 #include "analog.h"
-#include "ens160.h"
+#include "ens16x.h"
 #include "error.h"
 #include "error_base.h"
 #include "gpio.h"
@@ -56,7 +56,7 @@ void POWER_enable(POWER_requester_id_t requester_id, POWER_domain_t domain, LPTI
     // Local variables.
     ANALOG_status_t analog_status = ANALOG_SUCCESS;
 #ifdef HMD_AIR_QUALITY_ENABLE
-    ENS160_status_t ens160_status = ENS160_SUCCESS;
+    ENS16X_status_t ens160_status = ENS16X_SUCCESS;
 #endif
     SHT3X_status_t sht3x_status = SHT3X_SUCCESS;
     SX126X_status_t sx126x_status = SX126X_SUCCESS;
@@ -97,8 +97,8 @@ void POWER_enable(POWER_requester_id_t requester_id, POWER_domain_t domain, LPTI
         sht3x_status = SHT3X_init();
         _POWER_stack_driver_error(sht3x_status, SHT3X_SUCCESS, ERROR_BASE_SHT30, POWER_ERROR_DRIVER_SHT3X);
 #ifdef HMD_AIR_QUALITY_ENABLE
-        ens160_status = ENS160_init();
-        _POWER_stack_driver_error(ens160_status, ENS160_SUCCESS, ERROR_BASE_ENS160, POWER_ERROR_DRIVER_ENS160);
+        ens160_status = ENS16X_init();
+        _POWER_stack_driver_error(ens160_status, ENS16X_SUCCESS, ERROR_BASE_ENS160, POWER_ERROR_DRIVER_ENS160);
 #endif
         // Turn green LED on.
         led_status = LED_set_color(LED_COLOR_GREEN);
@@ -140,7 +140,7 @@ void POWER_disable(POWER_requester_id_t requester_id, POWER_domain_t domain) {
     // Local variables.
     ANALOG_status_t analog_status = ANALOG_SUCCESS;
 #ifdef HMD_AIR_QUALITY_ENABLE
-    ENS160_status_t ens160_status = ENS160_SUCCESS;
+    ENS16X_status_t ens160_status = ENS16X_SUCCESS;
 #endif
     SHT3X_status_t sht3x_status = SHT3X_SUCCESS;
     SX126X_status_t sx126x_status = SX126X_SUCCESS;
@@ -174,8 +174,8 @@ void POWER_disable(POWER_requester_id_t requester_id, POWER_domain_t domain) {
         sht3x_status = SHT3X_de_init();
         _POWER_stack_driver_error(sht3x_status, SHT3X_SUCCESS, ERROR_BASE_SHT30, POWER_ERROR_DRIVER_SHT3X);
 #ifdef HMD_AIR_QUALITY_ENABLE
-        ens160_status = ENS160_de_init();
-        _POWER_stack_driver_error(ens160_status, ENS160_SUCCESS, ERROR_BASE_ENS160, POWER_ERROR_DRIVER_ENS160);
+        ens160_status = ENS16X_de_init();
+        _POWER_stack_driver_error(ens160_status, ENS16X_SUCCESS, ERROR_BASE_ENS160, POWER_ERROR_DRIVER_ENS160);
 #endif
         // Turn digital sensors off.
         GPIO_write(&GPIO_SENSORS_POWER_ENABLE, 0);

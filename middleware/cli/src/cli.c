@@ -26,7 +26,8 @@
 #include "terminal_instance.h"
 #include "types.h"
 // Components.
-#include "ens160.h"
+#include "ens16x.h"
+#include "ens16x_driver_flags.h"
 #include "sht3x.h"
 #include "sx126x.h"
 // Middleware.
@@ -473,7 +474,7 @@ static AT_status_t _CLI_aqs_control_callback(void) {
     AT_status_t status = AT_SUCCESS;
     PARSER_status_t parser_status = PARSER_SUCCESS;
     SHT3X_status_t sht3x_status = SHT3X_SUCCESS;
-    ENS160_status_t ens160_status = ENS160_SUCCESS;
+    ENS16X_status_t ens160_status = ENS16X_SUCCESS;
     int32_t temperature_degrees = 0;
     int32_t humidity_percent = 0;
     int32_t state = 0;
@@ -483,8 +484,8 @@ static AT_status_t _CLI_aqs_control_callback(void) {
     // Check state.
     if (state == 0) {
         // Stop acquisition.
-        ens160_status = ENS160_stop_acquisition(I2C_ADDRESS_ENS160);
-        _CLI_check_driver_status(ens160_status, ENS160_SUCCESS, ERROR_BASE_ENS160);
+        ens160_status = ENS16X_stop_acquisition(I2C_ADDRESS_ENS160);
+        _CLI_check_driver_status(ens160_status, ENS16X_SUCCESS, ERROR_BASE_ENS160);
         // Turn digital sensors off.
         POWER_disable(POWER_REQUESTER_ID_CLI, POWER_DOMAIN_SENSORS);
         // Reset operating time.
@@ -497,8 +498,8 @@ static AT_status_t _CLI_aqs_control_callback(void) {
         sht3x_status = SHT3X_get_temperature_humidity(I2C_ADDRESS_SHT30, &temperature_degrees, &humidity_percent);
         _CLI_check_driver_status(sht3x_status, SHT3X_SUCCESS, ERROR_BASE_SHT30);
         // Start acquisition.
-        ens160_status = ENS160_start_acquisition(I2C_ADDRESS_ENS160, temperature_degrees, humidity_percent);
-        _CLI_check_driver_status(ens160_status, ENS160_SUCCESS, ERROR_BASE_ENS160);
+        ens160_status = ENS16X_start_acquisition(I2C_ADDRESS_ENS160, ENS16X_SENSING_MODE_STANDARD, temperature_degrees, humidity_percent);
+        _CLI_check_driver_status(ens160_status, ENS16X_SUCCESS, ERROR_BASE_ENS160);
         // Update start time if needed.
         if (cli_ctx.aqs_running_flag == 0) {
             cli_ctx.aqs_start_time = RTC_get_uptime_seconds();
@@ -519,16 +520,16 @@ errors:
 static AT_status_t _CLI_aqs_status_callback(void) {
     // Local variables.
     AT_status_t status = AT_SUCCESS;
-    ENS160_status_t ens160_status = ENS160_SUCCESS;
-    ENS160_device_status_t ens160_device_status;
+    ENS16X_status_t ens160_status = ENS16X_SUCCESS;
+    ENS16X_device_status_t ens160_device_status;
     // Check if acquisition is running.
     if (cli_ctx.aqs_running_flag == 0) {
         status = AT_ERROR_COMMAND_EXECUTION;
         goto errors;
     }
     // Read air quality data.
-    ens160_status = ENS160_get_device_status(I2C_ADDRESS_ENS160, &ens160_device_status);
-    _CLI_check_driver_status(ens160_status, ENS160_SUCCESS, ERROR_BASE_ENS160);
+    ens160_status = ENS16X_get_device_status(I2C_ADDRESS_ENS160, &ens160_device_status);
+    _CLI_check_driver_status(ens160_status, ENS16X_SUCCESS, ERROR_BASE_ENS160);
     // Print status.
     AT_reply_add_string("status=");
     AT_reply_add_integer((ens160_device_status.all), STRING_FORMAT_HEXADECIMAL, 1);
@@ -550,31 +551,34 @@ errors:
 static AT_status_t _CLI_aqs_read_callback(void) {
     // Local variables.
     AT_status_t status = AT_SUCCESS;
-    ENS160_status_t ens160_status = ENS160_SUCCESS;
-    int32_t aqi_uba = 0;
-    int32_t tvoc_ppb = 0;
-    int32_t eco2_ppm = 0;
+    ENS16X_status_t ens160_status = ENS16X_SUCCESS;
+    ENS16X_air_quality_data_t air_quality_data;
     // Check if acquisition is running.
     if (cli_ctx.aqs_running_flag == 0) {
         status = AT_ERROR_COMMAND_EXECUTION;
         goto errors;
     }
     // Read air quality data.
-    ens160_status = ENS160_read_air_quality(I2C_ADDRESS_ENS160, &aqi_uba, &tvoc_ppb, &eco2_ppm);
-    _CLI_check_driver_status(ens160_status, ENS160_SUCCESS, ERROR_BASE_ENS160);
+    ens160_status = ENS16X_read_air_quality(I2C_ADDRESS_ENS160, &air_quality_data);
+    _CLI_check_driver_status(ens160_status, ENS16X_SUCCESS, ERROR_BASE_ENS160);
     // Print data.
     // Air quality index.
-    AT_reply_add_string("AQI=");
-    AT_reply_add_integer(aqi_uba, STRING_FORMAT_DECIMAL, 0);
+    AT_reply_add_string("AQI_UBA=");
+    AT_reply_add_integer((air_quality_data.aqi_uba), STRING_FORMAT_DECIMAL, 0);
     AT_send_reply();
+#ifdef ENS16X_DRIVER_DEVICE_ENS161
+    AT_reply_add_string("AQI_S=");
+    AT_reply_add_integer((air_quality_data.aqi_s), STRING_FORMAT_DECIMAL, 0);
+    AT_send_reply();
+#endif
     // TVOC.
     AT_reply_add_string("TVOC=");
-    AT_reply_add_integer(tvoc_ppb, STRING_FORMAT_DECIMAL, 0);
+    AT_reply_add_integer((air_quality_data.tvoc_ppb), STRING_FORMAT_DECIMAL, 0);
     AT_reply_add_string("ppb");
     AT_send_reply();
     // ECO2.
     AT_reply_add_string("ECO2=");
-    AT_reply_add_integer(eco2_ppm, STRING_FORMAT_DECIMAL, 0);
+    AT_reply_add_integer((air_quality_data.eco2_ppm), STRING_FORMAT_DECIMAL, 0);
     AT_reply_add_string("ppm");
     AT_send_reply();
 errors:
