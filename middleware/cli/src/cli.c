@@ -28,6 +28,9 @@
 // Components.
 #include "ens16x.h"
 #include "ens16x_driver_flags.h"
+#include "fxls89xxxx.h"
+#include "fxls89xxxx_configuration.h"
+#include "sensors_hw.h"
 #include "sht3x.h"
 #include "sx126x.h"
 // Middleware.
@@ -68,10 +71,13 @@
 typedef struct {
     volatile uint8_t at_process_flag;
     PARSER_context_t* at_parser_ptr;
-#ifdef CLI_COMMAND_SENSORS
+#if ((defined CLI_COMMAND_SENSORS) && (defined HMD_AIR_QUALITY_ENABLE))
     uint8_t aqs_running_flag;
     uint32_t aqs_start_time;
     uint32_t aqs_operating_time;
+#endif
+#if ((defined CLI_COMMAND_SENSORS) && (defined HMD_ACCELEROMETER_ENABLE))
+    uint8_t acc_irq_flag;
 #endif
 } CLI_context_t;
 
@@ -95,6 +101,10 @@ static AT_status_t _CLI_ths_callback(void);
 static AT_status_t _CLI_aqs_read_callback(void);
 static AT_status_t _CLI_aqs_control_callback(void);
 static AT_status_t _CLI_aqs_status_callback(void);
+#endif
+#ifdef HMD_ACCELEROMETER_ENABLE
+static AT_status_t _CLI_acc_read_callback(void);
+static AT_status_t _CLI_acc_control_callback(void);
 #endif
 #endif
 /*******************************************************************/
@@ -191,6 +201,20 @@ static const AT_command_t CLI_COMMANDS_LIST[] = {
         .callback = &_CLI_aqs_read_callback
     },
 #endif
+#ifdef HMD_ACCELEROMETER_ENABLE
+    {
+        .syntax = "$ACC?",
+        .parameters = NULL,
+        .description = "Read accelerometer chip ID",
+        .callback = &_CLI_acc_read_callback
+    },
+    {
+        .syntax = "$ACC=",
+        .parameters = "<state[bit]",
+        .description = "Start or stop accelerometer",
+        .callback = &_CLI_acc_control_callback
+    },
+#endif
 #endif
 #ifdef CLI_COMMAND_SIGFOX_EP_LIB
 #ifdef SIGFOX_EP_CONTROL_KEEP_ALIVE_MESSAGE
@@ -243,10 +267,13 @@ static const AT_command_t CLI_COMMANDS_LIST[] = {
 static CLI_context_t cli_ctx = {
     .at_process_flag = 0,
     .at_parser_ptr = NULL,
-#ifdef CLI_COMMAND_SENSORS
+#if ((defined CLI_COMMAND_SENSORS) && (defined HMD_AIR_QUALITY_ENABLE))
     .aqs_running_flag = 0,
     .aqs_start_time = 0,
     .aqs_operating_time = 0,
+#endif
+#if ((defined CLI_COMMAND_SENSORS) && (defined HMD_ACCELEROMETER_ENABLE))
+    .acc_irq_flag = 0,
 #endif
 };
 
@@ -460,9 +487,7 @@ static AT_status_t _CLI_ths_callback(void) {
     AT_reply_add_string("%");
     AT_send_reply();
 errors:
-    if (cli_ctx.aqs_running_flag == 0) {
-        POWER_disable(POWER_REQUESTER_ID_CLI, POWER_DOMAIN_SENSORS);
-    }
+    POWER_disable(POWER_REQUESTER_ID_CLI, POWER_DOMAIN_SENSORS);
     return status;
 }
 #endif
@@ -487,13 +512,13 @@ static AT_status_t _CLI_aqs_control_callback(void) {
         ens160_status = ENS16X_stop_acquisition(I2C_ADDRESS_ENS160);
         _CLI_check_driver_status(ens160_status, ENS16X_SUCCESS, ERROR_BASE_ENS160);
         // Turn digital sensors off.
-        POWER_disable(POWER_REQUESTER_ID_CLI, POWER_DOMAIN_SENSORS);
+        POWER_disable(POWER_REQUESTER_ID_CLI_AQS, POWER_DOMAIN_SENSORS);
         // Reset operating time.
         cli_ctx.aqs_operating_time = 0;
     }
     else {
         // Turn digital sensors on.
-        POWER_enable(POWER_REQUESTER_ID_CLI, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_SLEEP);
+        POWER_enable(POWER_REQUESTER_ID_CLI_AQS, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_SLEEP);
         // Read ambient temperature and humidity.
         sht3x_status = SHT3X_get_temperature_humidity(I2C_ADDRESS_SHT30, &temperature_degrees, &humidity_percent);
         _CLI_check_driver_status(sht3x_status, SHT3X_SUCCESS, ERROR_BASE_SHT30);
@@ -510,7 +535,7 @@ static AT_status_t _CLI_aqs_control_callback(void) {
     cli_ctx.aqs_running_flag = (uint8_t) state;
     return status;
 errors:
-    POWER_disable(POWER_REQUESTER_ID_CLI, POWER_DOMAIN_SENSORS);
+    POWER_disable(POWER_REQUESTER_ID_CLI_AQS, POWER_DOMAIN_SENSORS);
     return status;
 }
 #endif
@@ -583,6 +608,72 @@ static AT_status_t _CLI_aqs_read_callback(void) {
     AT_send_reply();
 errors:
     return status;
+}
+#endif
+
+#if ((defined CLI_COMMAND_SENSORS) && (defined HMD_ACCELEROMETER_ENABLE))
+/*******************************************************************/
+static AT_status_t _CLI_acc_read_callback(void) {
+    // Local variables.
+    AT_status_t status = AT_SUCCESS;
+    FXLS89XXXX_status_t fxls89xxxx_status = FXLS89XXXX_SUCCESS;
+    uint8_t chip_id = 0;
+    // Turn accelerometer on.
+    POWER_enable(POWER_REQUESTER_ID_CLI, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_SLEEP);
+    // Read chip ID.
+    fxls89xxxx_status = FXLS89XXXX_get_id(I2C_ADDRESS_FXLS8974CF, &chip_id);
+    _CLI_check_driver_status(fxls89xxxx_status, FXLS89XXXX_SUCCESS, ERROR_BASE_FXLS8974CF);
+    // Print
+    AT_reply_add_string("FXLS8974CF chip_id=");
+    AT_reply_add_integer(chip_id, STRING_FORMAT_HEXADECIMAL, 1);
+    AT_send_reply();
+errors:
+    POWER_disable(POWER_REQUESTER_ID_CLI, POWER_DOMAIN_SENSORS);
+    return status;
+}
+#endif
+
+#if ((defined CLI_COMMAND_SENSORS) && (defined HMD_ACCELEROMETER_ENABLE))
+/*******************************************************************/
+static AT_status_t _CLI_acc_control_callback(void) {
+    // Local variables.
+    AT_status_t status = AT_SUCCESS;
+    PARSER_status_t parser_status = PARSER_SUCCESS;
+    FXLS89XXXX_status_t fxls89xxxx_status = FXLS89XXXX_SUCCESS;
+    int32_t state = 0;
+    // Try parsing downlink request parameter.
+    parser_status = PARSER_get_parameter(cli_ctx.at_parser_ptr, STRING_FORMAT_BOOLEAN, STRING_CHAR_NULL, &state);
+    PARSER_exit_error(AT_ERROR_BASE_PARSER);
+    // Check state.
+    if (state == 0) {
+        // Disable interrupt.
+        SENSORS_HW_disable_accelerometer_interrupt();
+        // Configure accelerometer in sleep mode.
+        fxls89xxxx_status = FXLS89XXXX_write_configuration(I2C_ADDRESS_FXLS8974CF, FXLS89XXXX_SLEEP_CONFIGURATION, FXLS89XXXX_SLEEP_CONFIGURATION_SIZE);
+        _CLI_check_driver_status(fxls89xxxx_status, FXLS89XXXX_SUCCESS, ERROR_BASE_FXLS8974CF);
+        // Turn digital sensors off.
+        POWER_disable(POWER_REQUESTER_ID_CLI_ACC, POWER_DOMAIN_SENSORS);
+    }
+    else {
+        // Turn digital sensors on.
+        POWER_enable(POWER_REQUESTER_ID_CLI_ACC, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_SLEEP);
+        // Configure accelerometer in active mode.
+        fxls89xxxx_status = FXLS89XXXX_write_configuration(I2C_ADDRESS_FXLS8974CF, FXLS89XXXX_ACTIVE_CONFIGURATION, FXLS89XXXX_ACTIVE_CONFIGURATION_SIZE);
+        _CLI_check_driver_status(fxls89xxxx_status, FXLS89XXXX_SUCCESS, ERROR_BASE_FXLS8974CF);
+        // Enable interrupt.
+        SENSORS_HW_enable_accelerometer_interrupt();
+    }
+    return status;
+errors:
+    POWER_disable(POWER_REQUESTER_ID_CLI_ACC, POWER_DOMAIN_SENSORS);
+    return status;
+}
+#endif
+
+#if ((defined CLI_COMMAND_SENSORS) && (defined HMD_ACCELEROMETER_ENABLE))
+/*******************************************************************/
+static void _CLI_acc_irq_callback(void) {
+    cli_ctx.acc_irq_flag = 1;
 }
 #endif
 
@@ -988,6 +1079,9 @@ CLI_status_t CLI_init(void) {
         at_status = AT_register_command(&(CLI_COMMANDS_LIST[idx]));
         AT_exit_error(CLI_ERROR_BASE_AT);
     }
+#if ((defined CLI_COMMAND_SENSORS) && (defined HMD_ACCELEROMETER_ENABLE))
+    SENSORS_HW_set_accelerometer_irq_callback(&_CLI_acc_irq_callback);
+#endif
 errors:
     return status;
 }
@@ -1022,9 +1116,16 @@ CLI_status_t CLI_process(void) {
         at_status = AT_process();
         AT_exit_error(CLI_ERROR_BASE_AT);
     }
-#ifdef CLI_COMMAND_SENSORS
+#if ((defined CLI_COMMAND_SENSORS) && (defined HMD_AIR_QUALITY_ENABLE))
     if (cli_ctx.aqs_running_flag != 0) {
         cli_ctx.aqs_operating_time = (RTC_get_uptime_seconds() -  cli_ctx.aqs_start_time);
+    }
+#endif
+#if ((defined CLI_COMMAND_SENSORS) && (defined HMD_ACCELEROMETER_ENABLE))
+    if (cli_ctx.acc_irq_flag != 0) {
+        cli_ctx.acc_irq_flag = 0;
+        AT_reply_add_string("FXLS8974CF IRQ");
+        AT_send_reply();
     }
 #endif
 errors:

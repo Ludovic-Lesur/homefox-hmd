@@ -16,6 +16,9 @@
 [submodule "ens16x-driver"]
     path = drivers/components/ens16x-driver
     url = https://github.com/Ludovic-Lesur/ens16x-driver.git
+[submodule "fxls89xxxx-driver"]
+    path = drivers/components/fxls89xxxx-driver
+    url = https://github.com/Ludovic-Lesur/fxls89xxxx-driver.git
 [submodule "sx126x-driver"]
     path = drivers/components/sx126x-driver
     url = https://github.com/Ludovic-Lesur/sx126x-driver.git

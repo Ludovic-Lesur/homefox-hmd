@@ -11,6 +11,7 @@
 #include "ens16x.h"
 #include "error.h"
 #include "error_base.h"
+#include "fxls89xxxx.h"
 #include "gpio.h"
 #include "hmd_flags.h"
 #include "lptim.h"
@@ -58,6 +59,9 @@ void POWER_enable(POWER_requester_id_t requester_id, POWER_domain_t domain, LPTI
 #ifdef HMD_AIR_QUALITY_ENABLE
     ENS16X_status_t ens160_status = ENS16X_SUCCESS;
 #endif
+#ifdef HMD_ACCELEROMETER_ENABLE
+    FXLS89XXXX_status_t fxls89xxxx_status = FXLS89XXXX_SUCCESS;
+#endif
     SHT3X_status_t sht3x_status = SHT3X_SUCCESS;
     SX126X_status_t sx126x_status = SX126X_SUCCESS;
     RFE_status_t rfe_status = RFE_SUCCESS;
@@ -98,7 +102,11 @@ void POWER_enable(POWER_requester_id_t requester_id, POWER_domain_t domain, LPTI
         _POWER_stack_driver_error(sht3x_status, SHT3X_SUCCESS, ERROR_BASE_SHT30, POWER_ERROR_DRIVER_SHT3X);
 #ifdef HMD_AIR_QUALITY_ENABLE
         ens160_status = ENS16X_init();
-        _POWER_stack_driver_error(ens160_status, ENS16X_SUCCESS, ERROR_BASE_ENS160, POWER_ERROR_DRIVER_ENS160);
+        _POWER_stack_driver_error(ens160_status, ENS16X_SUCCESS, ERROR_BASE_ENS160, POWER_ERROR_DRIVER_ENS16X);
+#endif
+#ifdef HMD_ACCELEROMETER_ENABLE
+        fxls89xxxx_status = FXLS89XXXX_init();
+        _POWER_stack_driver_error(fxls89xxxx_status, FXLS89XXXX_SUCCESS, ERROR_BASE_FXLS8974CF, POWER_ERROR_DRIVER_FXLS89XXXX);
 #endif
         // Turn green LED on.
         led_status = LED_set_color(LED_COLOR_GREEN);
@@ -142,6 +150,9 @@ void POWER_disable(POWER_requester_id_t requester_id, POWER_domain_t domain) {
 #ifdef HMD_AIR_QUALITY_ENABLE
     ENS16X_status_t ens160_status = ENS16X_SUCCESS;
 #endif
+#ifdef HMD_ACCELEROMETER_ENABLE
+    FXLS89XXXX_status_t fxls89xxxx_status = FXLS89XXXX_SUCCESS;
+#endif
     SHT3X_status_t sht3x_status = SHT3X_SUCCESS;
     SX126X_status_t sx126x_status = SX126X_SUCCESS;
     RFE_status_t rfe_status = RFE_SUCCESS;
@@ -175,7 +186,11 @@ void POWER_disable(POWER_requester_id_t requester_id, POWER_domain_t domain) {
         _POWER_stack_driver_error(sht3x_status, SHT3X_SUCCESS, ERROR_BASE_SHT30, POWER_ERROR_DRIVER_SHT3X);
 #ifdef HMD_AIR_QUALITY_ENABLE
         ens160_status = ENS16X_de_init();
-        _POWER_stack_driver_error(ens160_status, ENS16X_SUCCESS, ERROR_BASE_ENS160, POWER_ERROR_DRIVER_ENS160);
+        _POWER_stack_driver_error(ens160_status, ENS16X_SUCCESS, ERROR_BASE_ENS160, POWER_ERROR_DRIVER_ENS16X);
+#endif
+#ifdef HMD_ACCELEROMETER_ENABLE
+        fxls89xxxx_status = FXLS89XXXX_de_init();
+        _POWER_stack_driver_error(fxls89xxxx_status, FXLS89XXXX_SUCCESS, ERROR_BASE_FXLS8974CF, POWER_ERROR_DRIVER_FXLS89XXXX);
 #endif
         // Turn digital sensors off.
         GPIO_write(&GPIO_SENSORS_POWER_ENABLE, 0);
