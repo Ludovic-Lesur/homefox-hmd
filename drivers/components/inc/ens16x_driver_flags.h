@@ -13,7 +13,7 @@
 
 /*** ENS16X driver compilation flags ***/
 
-#ifndef HMD_AIR_QUALITY_ENABLE
+#ifndef HMD_ENS16X_ENABLE
 #define ENS16X_DRIVER_DISABLE
 #endif
 

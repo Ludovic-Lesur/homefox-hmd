@@ -26,6 +26,7 @@
 #include "terminal_instance.h"
 #include "types.h"
 // Components.
+#include "ens21x.h"
 #include "ens16x.h"
 #include "ens16x_driver_flags.h"
 #include "fxls89xxxx.h"
@@ -54,16 +55,9 @@
 /*** CLI local macros ***/
 
 // Parsing.
-#define CLI_CHAR_SEPARATOR          STRING_CHAR_COMMA
-// Duration of RSSI command.
-#define CLI_RSSI_REPORT_PERIOD_MS   500
-// Enabled commands.
-#define CLI_COMMAND_NVM
-#define CLI_COMMAND_SENSORS
-#define CLI_COMMAND_SIGFOX_EP_LIB
-#define CLI_COMMAND_SIGFOX_EP_ADDON_RFP
-#define CLI_COMMAND_CW
-#define CLI_COMMAND_RSSI
+#define CLI_CHAR_SEPARATOR              STRING_CHAR_COMMA
+#define CLI_RSSI_REPORT_PERIOD_MS       500
+#define CLI_TEMPERATURE_STRING_SIZE     5
 
 /*** CLI local structures ***/
 
@@ -71,12 +65,12 @@
 typedef struct {
     volatile uint8_t at_process_flag;
     PARSER_context_t* at_parser_ptr;
-#if ((defined CLI_COMMAND_SENSORS) && (defined HMD_AIR_QUALITY_ENABLE))
+#ifdef HMD_ENS16X_ENABLE
     uint8_t aqs_running_flag;
     uint32_t aqs_start_time;
     uint32_t aqs_operating_time;
 #endif
-#if ((defined CLI_COMMAND_SENSORS) && (defined HMD_ACCELEROMETER_ENABLE))
+#ifdef HMD_FXLS89XXXX_ENABLE
     uint8_t acc_irq_flag;
 #endif
 } CLI_context_t;
@@ -86,44 +80,32 @@ typedef struct {
 /*******************************************************************/
 static AT_status_t _CLI_z_callback(void);
 static AT_status_t _CLI_rcc_callback(void);
-/*******************************************************************/
-#ifdef CLI_COMMAND_NVM
 static AT_status_t _CLI_get_ep_id_callback(void);
 static AT_status_t _CLI_set_ep_id_callback(void);
 static AT_status_t _CLI_get_ep_key_callback(void);
 static AT_status_t _CLI_set_ep_key_callback(void);
-#endif
-/*******************************************************************/
-#ifdef CLI_COMMAND_SENSORS
 static AT_status_t _CLI_adc_callback(void);
+#if ((defined HMD_SHT3X_ENABLE) || (defined HMD_ENS21X_ENABLE))
 static AT_status_t _CLI_ths_callback(void);
-#ifdef HMD_AIR_QUALITY_ENABLE
+#endif
+#ifdef HMD_ENS16X_ENABLE
 static AT_status_t _CLI_aqs_read_callback(void);
 static AT_status_t _CLI_aqs_control_callback(void);
 static AT_status_t _CLI_aqs_status_callback(void);
 #endif
-#ifdef HMD_ACCELEROMETER_ENABLE
+#ifdef HMD_FXLS89XXXX_ENABLE
 static AT_status_t _CLI_acc_read_callback(void);
 static AT_status_t _CLI_acc_control_callback(void);
 #endif
-#endif
-/*******************************************************************/
-#ifdef CLI_COMMAND_SIGFOX_EP_LIB
 #ifdef SIGFOX_EP_CONTROL_KEEP_ALIVE_MESSAGE
 static AT_status_t _CLI_so_callback(void);
 #endif
 static AT_status_t _CLI_sb_callback(void);
 static AT_status_t _CLI_sf_callback(void);
-#endif
-/*******************************************************************/
-#ifdef CLI_COMMAND_SIGFOX_EP_ADDON_RFP
 static AT_status_t _CLI_tm_callback(void);
-#endif
-/*******************************************************************/
-#ifdef CLI_COMMAND_CW
 static AT_status_t _CLI_cw_callback(void);
 #endif
-#if (defined CLI_COMMAND_RSSI) && (defined SIGFOX_EP_BIDIRECTIONAL)
+#ifdef SIGFOX_EP_BIDIRECTIONAL
 static AT_status_t _CLI_rssi_callback(void);
 #endif
 
@@ -142,7 +124,6 @@ static const AT_command_t CLI_COMMANDS_LIST[] = {
         .description = "Get clocks frequency",
         .callback = &_CLI_rcc_callback
     },
-#ifdef CLI_COMMAND_NVM
     {
         .syntax = "$ID?",
         .parameters = NULL,
@@ -167,21 +148,21 @@ static const AT_command_t CLI_COMMANDS_LIST[] = {
         .description = "Set Sigfox EP key",
         .callback = &_CLI_set_ep_key_callback
     },
-#endif
-#ifdef CLI_COMMAND_SENSORS
     {
         .syntax = "$ADC?",
         .parameters = NULL,
         .description = "Read analog measurements",
         .callback = &_CLI_adc_callback
     },
+#if ((defined HMD_SHT3X_ENABLE) || (defined HMD_ENS21X_ENABLE))
     {
         .syntax = "$THS?",
         .parameters = NULL,
         .description = "Read temperature and humidity",
         .callback = &_CLI_ths_callback
     },
-#ifdef HMD_AIR_QUALITY_ENABLE
+#endif
+#ifdef HMD_ENS16X_ENABLE
     {
         .syntax = "$AQS=",
         .parameters = "<state[bit]",
@@ -201,7 +182,7 @@ static const AT_command_t CLI_COMMANDS_LIST[] = {
         .callback = &_CLI_aqs_read_callback
     },
 #endif
-#ifdef HMD_ACCELEROMETER_ENABLE
+#ifdef HMD_FXLS89XXXX_ENABLE
     {
         .syntax = "$ACC?",
         .parameters = NULL,
@@ -215,8 +196,6 @@ static const AT_command_t CLI_COMMANDS_LIST[] = {
         .callback = &_CLI_acc_control_callback
     },
 #endif
-#endif
-#ifdef CLI_COMMAND_SIGFOX_EP_LIB
 #ifdef SIGFOX_EP_CONTROL_KEEP_ALIVE_MESSAGE
     {
         .syntax = "$SO",
@@ -237,24 +216,19 @@ static const AT_command_t CLI_COMMANDS_LIST[] = {
         .description = "Sigfox send frame",
         .callback = &_CLI_sf_callback
     },
-#endif
-#ifdef CLI_COMMAND_SIGFOX_EP_ADDON_RFP
     {
         .syntax = "$TM=",
         .parameters = "<bit_rate_index[dec]>,<test_mode_reference[dec]>",
         .description = "Sigfox RFP test mode",
         .callback = _CLI_tm_callback
     },
-#endif
-#ifdef CLI_COMMAND_CW
     {
         .syntax = "$CW=",
         .parameters = "<frequency[hz]>,<enable[bit]>,(<output_power[dbm]>)",
         .description = "Continuous wave",
         .callback = &_CLI_cw_callback
     },
-#endif
-#if (defined CLI_COMMAND_RSSI) && (defined SIGFOX_EP_BIDIRECTIONAL)
+#ifdef SIGFOX_EP_BIDIRECTIONAL
     {
         .syntax = "$RSSI=",
         .parameters = "<frequency[hz]>,<duration[s]>",
@@ -267,12 +241,12 @@ static const AT_command_t CLI_COMMANDS_LIST[] = {
 static CLI_context_t cli_ctx = {
     .at_process_flag = 0,
     .at_parser_ptr = NULL,
-#if ((defined CLI_COMMAND_SENSORS) && (defined HMD_AIR_QUALITY_ENABLE))
+#if ((defined CLI_COMMAND_SENSORS) && (defined HMD_ENS16X_ENABLE))
     .aqs_running_flag = 0,
     .aqs_start_time = 0,
     .aqs_operating_time = 0,
 #endif
-#if ((defined CLI_COMMAND_SENSORS) && (defined HMD_ACCELEROMETER_ENABLE))
+#if ((defined CLI_COMMAND_SENSORS) && (defined HMD_FXLS89XXXX_ENABLE))
     .acc_irq_flag = 0,
 #endif
 };
@@ -340,7 +314,6 @@ errors:
     return status;
 }
 
-#ifdef CLI_COMMAND_NVM
 /*******************************************************************/
 static AT_status_t _CLI_get_ep_id_callback(void) {
     // Local variables.
@@ -358,9 +331,7 @@ static AT_status_t _CLI_get_ep_id_callback(void) {
 errors:
     return status;
 }
-#endif
 
-#ifdef CLI_COMMAND_NVM
 /*******************************************************************/
 static AT_status_t _CLI_set_ep_id_callback(void) {
     // Local variables.
@@ -381,9 +352,7 @@ static AT_status_t _CLI_set_ep_id_callback(void) {
 errors:
     return status;
 }
-#endif
 
-#ifdef CLI_COMMAND_NVM
 /*******************************************************************/
 static AT_status_t _CLI_get_ep_key_callback(void) {
     // Local variables.
@@ -401,9 +370,7 @@ static AT_status_t _CLI_get_ep_key_callback(void) {
 errors:
     return status;
 }
-#endif
 
-#ifdef CLI_COMMAND_NVM
 /*******************************************************************/
 static AT_status_t _CLI_set_ep_key_callback(void) {
     // Local variables.
@@ -424,9 +391,7 @@ static AT_status_t _CLI_set_ep_key_callback(void) {
 errors:
     return status;
 }
-#endif
 
-#ifdef CLI_COMMAND_SENSORS
 /*******************************************************************/
 static AT_status_t _CLI_adc_callback(void) {
     // Local variables.
@@ -460,48 +425,73 @@ errors:
     POWER_disable(POWER_REQUESTER_ID_CLI, POWER_DOMAIN_ANALOG);
     return status;
 }
-#endif
 
-#ifdef CLI_COMMAND_SENSORS
+#if ((defined HMD_SHT3X_ENABLE) || (defined HMD_ENS21X_ENABLE))
 /*******************************************************************/
 static AT_status_t _CLI_ths_callback(void) {
     // Local variables.
     AT_status_t status = AT_SUCCESS;
+#ifdef HMD_ENS21X_ENABLE
+    ENS21X_status_t ens21x_status = ENS21X_SUCCESS;
+#endif
+#ifdef HMD_SHT3X_ENABLE
     SHT3X_status_t sht3x_status = SHT3X_SUCCESS;
-    int32_t temperature_degrees = 0;
+#endif
+    char_t temperature_str[CLI_TEMPERATURE_STRING_SIZE] = { STRING_CHAR_NULL };
+    int32_t temperature_tenth_degrees = 0;
     int32_t humidity_percent = 0;
     // Turn digital sensors on.
     POWER_enable(POWER_REQUESTER_ID_CLI, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_SLEEP);
+#ifdef HMD_ENS21X_ENABLE
     // Perform measurements.
-    sht3x_status = SHT3X_get_temperature_humidity(I2C_ADDRESS_SHT30, &temperature_degrees, &humidity_percent);
-    _CLI_check_driver_status(sht3x_status, SHT3X_SUCCESS, ERROR_BASE_SHT30);
-    // Read and print data.
+    ens21x_status = ENS21X_get_temperature_humidity(I2C_ADDRESS_ENS210, &temperature_tenth_degrees, &humidity_percent);
+    _CLI_check_driver_status(ens21x_status, ENS21X_SUCCESS, ERROR_BASE_ENS210);
     // Temperature.
-    AT_reply_add_string("T=");
-    AT_reply_add_integer(temperature_degrees, STRING_FORMAT_DECIMAL, 0);
-    AT_reply_add_string("dC");
-    AT_send_reply();
+    STRING_integer_to_floating_decimal_string(temperature_tenth_degrees, 1, (CLI_TEMPERATURE_STRING_SIZE - 1), (char_t*) temperature_str);
+    AT_reply_add_string("ENS210: T=");
+    AT_reply_add_string(temperature_str);
+    AT_reply_add_string("dC H=");
     // Humidity.
-    AT_reply_add_string("H=");
     AT_reply_add_integer(humidity_percent, STRING_FORMAT_DECIMAL, 0);
     AT_reply_add_string("%");
     AT_send_reply();
+#endif
+#ifdef HMD_SHT3X_ENABLE
+    // Perform measurements.
+    sht3x_status = SHT3X_get_temperature_humidity(I2C_ADDRESS_SHT30, &temperature_tenth_degrees, &humidity_percent);
+    _CLI_check_driver_status(sht3x_status, SHT3X_SUCCESS, ERROR_BASE_SHT30);
+    // Temperature.
+    STRING_integer_to_floating_decimal_string(temperature_tenth_degrees, 1, (CLI_TEMPERATURE_STRING_SIZE - 1), (char_t*) temperature_str);
+    AT_reply_add_string("SHT30: T=");
+    AT_reply_add_string(temperature_str);
+    AT_reply_add_string("dC H=");
+    // Humidity.
+    AT_reply_add_integer(humidity_percent, STRING_FORMAT_DECIMAL, 0);
+    AT_reply_add_string("%");
+    AT_send_reply();
+#endif
 errors:
     POWER_disable(POWER_REQUESTER_ID_CLI, POWER_DOMAIN_SENSORS);
     return status;
 }
 #endif
 
-#if ((defined CLI_COMMAND_SENSORS) && (defined HMD_AIR_QUALITY_ENABLE))
+#ifdef HMD_ENS16X_ENABLE
 /*******************************************************************/
 static AT_status_t _CLI_aqs_control_callback(void) {
     // Local variables.
     AT_status_t status = AT_SUCCESS;
     PARSER_status_t parser_status = PARSER_SUCCESS;
+    ENS16X_status_t ens16x_status = ENS16X_SUCCESS;
+#ifdef HMD_ENS21X_ENABLE
+    ENS21X_status_t ens21x_status = ENS21X_SUCCESS;
+#else
+#ifdef HMD_SHT3X_ENABLE
     SHT3X_status_t sht3x_status = SHT3X_SUCCESS;
-    ENS16X_status_t ens160_status = ENS16X_SUCCESS;
-    int32_t temperature_degrees = 0;
-    int32_t humidity_percent = 0;
+#endif
+#endif
+    int32_t temperature_tenth_degrees = 250;
+    int32_t humidity_percent = 50;
     int32_t state = 0;
     // Try parsing downlink request parameter.
     parser_status = PARSER_get_parameter(cli_ctx.at_parser_ptr, STRING_FORMAT_BOOLEAN, STRING_CHAR_NULL, &state);
@@ -509,8 +499,8 @@ static AT_status_t _CLI_aqs_control_callback(void) {
     // Check state.
     if (state == 0) {
         // Stop acquisition.
-        ens160_status = ENS16X_stop_acquisition(I2C_ADDRESS_ENS160);
-        _CLI_check_driver_status(ens160_status, ENS16X_SUCCESS, ERROR_BASE_ENS160);
+        ens16x_status = ENS16X_stop_acquisition(I2C_ADDRESS_ENS16X);
+        _CLI_check_driver_status(ens16x_status, ENS16X_SUCCESS, ERROR_BASE_ENS160);
         // Turn digital sensors off.
         POWER_disable(POWER_REQUESTER_ID_CLI_AQS, POWER_DOMAIN_SENSORS);
         // Reset operating time.
@@ -520,11 +510,18 @@ static AT_status_t _CLI_aqs_control_callback(void) {
         // Turn digital sensors on.
         POWER_enable(POWER_REQUESTER_ID_CLI_AQS, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_SLEEP);
         // Read ambient temperature and humidity.
-        sht3x_status = SHT3X_get_temperature_humidity(I2C_ADDRESS_SHT30, &temperature_degrees, &humidity_percent);
+#ifdef HMD_ENS21X_ENABLE
+        ens21x_status = ENS21X_get_temperature_humidity(I2C_ADDRESS_ENS210, &temperature_tenth_degrees, &humidity_percent);
+        _CLI_check_driver_status(ens21x_status, ENS21X_SUCCESS, ERROR_BASE_ENS210);
+#else
+#ifdef HMD_SHT3X_ENABLE
+        sht3x_status = SHT3X_get_temperature_humidity(I2C_ADDRESS_SHT30, &temperature_tenth_degrees, &humidity_percent);
         _CLI_check_driver_status(sht3x_status, SHT3X_SUCCESS, ERROR_BASE_SHT30);
+#endif
+#endif
         // Start acquisition.
-        ens160_status = ENS16X_start_acquisition(I2C_ADDRESS_ENS160, ENS16X_SENSING_MODE_STANDARD, temperature_degrees, humidity_percent);
-        _CLI_check_driver_status(ens160_status, ENS16X_SUCCESS, ERROR_BASE_ENS160);
+        ens16x_status = ENS16X_start_acquisition(I2C_ADDRESS_ENS16X, ENS16X_SENSING_MODE_STANDARD, temperature_tenth_degrees, humidity_percent);
+        _CLI_check_driver_status(ens16x_status, ENS16X_SUCCESS, ERROR_BASE_ENS160);
         // Update start time if needed.
         if (cli_ctx.aqs_running_flag == 0) {
             cli_ctx.aqs_start_time = RTC_get_uptime_seconds();
@@ -540,7 +537,7 @@ errors:
 }
 #endif
 
-#if ((defined CLI_COMMAND_SENSORS) && (defined HMD_AIR_QUALITY_ENABLE))
+#ifdef HMD_ENS16X_ENABLE
 /*******************************************************************/
 static AT_status_t _CLI_aqs_status_callback(void) {
     // Local variables.
@@ -553,7 +550,7 @@ static AT_status_t _CLI_aqs_status_callback(void) {
         goto errors;
     }
     // Read air quality data.
-    ens160_status = ENS16X_get_device_status(I2C_ADDRESS_ENS160, &ens160_device_status);
+    ens160_status = ENS16X_get_device_status(I2C_ADDRESS_ENS16X, &ens160_device_status);
     _CLI_check_driver_status(ens160_status, ENS16X_SUCCESS, ERROR_BASE_ENS160);
     // Print status.
     AT_reply_add_string("status=");
@@ -571,7 +568,7 @@ errors:
 }
 #endif
 
-#if ((defined CLI_COMMAND_SENSORS) && (defined HMD_AIR_QUALITY_ENABLE))
+#ifdef HMD_ENS16X_ENABLE
 /*******************************************************************/
 static AT_status_t _CLI_aqs_read_callback(void) {
     // Local variables.
@@ -584,7 +581,7 @@ static AT_status_t _CLI_aqs_read_callback(void) {
         goto errors;
     }
     // Read air quality data.
-    ens160_status = ENS16X_read_air_quality(I2C_ADDRESS_ENS160, &air_quality_data);
+    ens160_status = ENS16X_read_air_quality(I2C_ADDRESS_ENS16X, &air_quality_data);
     _CLI_check_driver_status(ens160_status, ENS16X_SUCCESS, ERROR_BASE_ENS160);
     // Print data.
     // Air quality index.
@@ -611,7 +608,7 @@ errors:
 }
 #endif
 
-#if ((defined CLI_COMMAND_SENSORS) && (defined HMD_ACCELEROMETER_ENABLE))
+#ifdef HMD_FXLS89XXXX_ENABLE
 /*******************************************************************/
 static AT_status_t _CLI_acc_read_callback(void) {
     // Local variables.
@@ -633,7 +630,7 @@ errors:
 }
 #endif
 
-#if ((defined CLI_COMMAND_SENSORS) && (defined HMD_ACCELEROMETER_ENABLE))
+#ifdef HMD_FXLS89XXXX_ENABLE
 /*******************************************************************/
 static AT_status_t _CLI_acc_control_callback(void) {
     // Local variables.
@@ -670,14 +667,14 @@ errors:
 }
 #endif
 
-#if ((defined CLI_COMMAND_SENSORS) && (defined HMD_ACCELEROMETER_ENABLE))
+#ifdef HMD_FXLS89XXXX_ENABLE
 /*******************************************************************/
 static void _CLI_acc_irq_callback(void) {
     cli_ctx.acc_irq_flag = 1;
 }
 #endif
 
-#if (((defined CLI_COMMAND_SIGFOX_EP_LIB) || (defined CLI_COMMAND_SIGFOX_EP_ADDON_RFP)) && (defined SIGFOX_EP_BIDIRECTIONAL))
+#ifdef SIGFOX_EP_BIDIRECTIONAL
 /*******************************************************************/
 static void _CLI_print_dl_payload(sfx_u8* dl_payload, sfx_u8 dl_payload_size, sfx_s16 rssi_dbm) {
     // Local variables.
@@ -694,7 +691,7 @@ static void _CLI_print_dl_payload(sfx_u8* dl_payload, sfx_u8 dl_payload_size, sf
 }
 #endif
 
-#if (defined CLI_COMMAND_SIGFOX_EP_LIB) && (defined SIGFOX_EP_BIDIRECTIONAL)
+#ifdef SIGFOX_EP_BIDIRECTIONAL
 /*******************************************************************/
 static AT_status_t _CLI_read_print_dl_payload(void) {
     // Local variables.
@@ -722,7 +719,7 @@ errors:
 }
 #endif
 
-#if (defined CLI_COMMAND_SIGFOX_EP_LIB) && (defined SIGFOX_EP_CONTROL_KEEP_ALIVE_MESSAGE)
+#ifdef SIGFOX_EP_CONTROL_KEEP_ALIVE_MESSAGE
 /*******************************************************************/
 static AT_status_t _CLI_so_callback(void) {
     // Local variables.
@@ -751,9 +748,7 @@ errors:
 end:
     return status;
 }
-#endif
 
-#ifdef CLI_COMMAND_SIGFOX_EP_LIB
 /*******************************************************************/
 static AT_status_t _CLI_sb_callback(void) {
     // Local variables.
@@ -815,9 +810,7 @@ errors:
 end:
     return status;
 }
-#endif
 
-#ifdef CLI_COMMAND_SIGFOX_EP_LIB
 /*******************************************************************/
 static AT_status_t _CLI_sf_callback(void) {
     // Local variables.
@@ -883,9 +876,7 @@ errors:
 end:
     return status;
 }
-#endif
 
-#if (defined CLI_COMMAND_SIGFOX_EP_ADDON_RFP)
 /*******************************************************************/
 static AT_status_t _CLI_tm_callback(void) {
     // Local variables.
@@ -925,9 +916,7 @@ errors:
 end:
     return status;
 }
-#endif
 
-#ifdef CLI_COMMAND_CW
 /*******************************************************************/
 static AT_status_t _CLI_cw_callback(void) {
     // Local variables.
@@ -989,9 +978,8 @@ errors:
 end:
     return status;
 }
-#endif
 
-#if (defined CLI_COMMAND_RSSI) && (defined SIGFOX_EP_BIDIRECTIONAL)
+#ifdef SIGFOX_EP_BIDIRECTIONAL
 /*******************************************************************/
 static AT_status_t _CLI_rssi_callback(void) {
     // Local variables.
@@ -1079,7 +1067,7 @@ CLI_status_t CLI_init(void) {
         at_status = AT_register_command(&(CLI_COMMANDS_LIST[idx]));
         AT_exit_error(CLI_ERROR_BASE_AT);
     }
-#if ((defined CLI_COMMAND_SENSORS) && (defined HMD_ACCELEROMETER_ENABLE))
+#ifdef HMD_FXLS89XXXX_ENABLE
     SENSORS_HW_set_accelerometer_irq_callback(&_CLI_acc_irq_callback);
 #endif
 errors:
@@ -1116,12 +1104,12 @@ CLI_status_t CLI_process(void) {
         at_status = AT_process();
         AT_exit_error(CLI_ERROR_BASE_AT);
     }
-#if ((defined CLI_COMMAND_SENSORS) && (defined HMD_AIR_QUALITY_ENABLE))
+#ifdef HMD_ENS16X_ENABLE
     if (cli_ctx.aqs_running_flag != 0) {
         cli_ctx.aqs_operating_time = (RTC_get_uptime_seconds() -  cli_ctx.aqs_start_time);
     }
 #endif
-#if ((defined CLI_COMMAND_SENSORS) && (defined HMD_ACCELEROMETER_ENABLE))
+#ifdef HMD_FXLS89XXXX_ENABLE
     if (cli_ctx.acc_irq_flag != 0) {
         cli_ctx.acc_irq_flag = 0;
         AT_reply_add_string("FXLS8974CF IRQ");

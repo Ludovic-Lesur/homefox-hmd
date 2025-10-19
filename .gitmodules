@@ -13,6 +13,9 @@
 [submodule "sht3x-driver"]
     path = drivers/components/sht3x-driver
     url = https://github.com/Ludovic-Lesur/sht3x-driver.git
+[submodule "ens21x-driver"]
+    path = drivers/components/ens21x-driver
+    url = https://github.com/Ludovic-Lesur/ens21x-driver.git
 [submodule "ens16x-driver"]
     path = drivers/components/ens16x-driver
     url = https://github.com/Ludovic-Lesur/ens16x-driver.git
