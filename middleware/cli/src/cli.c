@@ -104,7 +104,6 @@ static AT_status_t _CLI_sb_callback(void);
 static AT_status_t _CLI_sf_callback(void);
 static AT_status_t _CLI_tm_callback(void);
 static AT_status_t _CLI_cw_callback(void);
-#endif
 #ifdef SIGFOX_EP_BIDIRECTIONAL
 static AT_status_t _CLI_rssi_callback(void);
 #endif
@@ -437,8 +436,8 @@ static AT_status_t _CLI_ths_callback(void) {
 #ifdef HMD_SHT3X_ENABLE
     SHT3X_status_t sht3x_status = SHT3X_SUCCESS;
 #endif
-    char_t temperature_str[CLI_TEMPERATURE_STRING_SIZE] = { STRING_CHAR_NULL };
     int32_t temperature_tenth_degrees = 0;
+    char_t temperature_str[CLI_TEMPERATURE_STRING_SIZE] = { STRING_CHAR_NULL };
     int32_t humidity_percent = 0;
     // Turn digital sensors on.
     POWER_enable(POWER_REQUESTER_ID_CLI, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_SLEEP);
@@ -446,6 +445,7 @@ static AT_status_t _CLI_ths_callback(void) {
     // Perform measurements.
     ens21x_status = ENS21X_get_temperature_humidity(I2C_ADDRESS_ENS210, &temperature_tenth_degrees, &humidity_percent);
     _CLI_check_driver_status(ens21x_status, ENS21X_SUCCESS, ERROR_BASE_ENS210);
+    // Read and print data.
     // Temperature.
     STRING_integer_to_floating_decimal_string(temperature_tenth_degrees, 1, (CLI_TEMPERATURE_STRING_SIZE - 1), (char_t*) temperature_str);
     AT_reply_add_string("ENS210: T=");
@@ -748,6 +748,7 @@ errors:
 end:
     return status;
 }
+#endif
 
 /*******************************************************************/
 static AT_status_t _CLI_sb_callback(void) {
