@@ -27,7 +27,7 @@ ENS16X_status_t ENS16X_HW_init(void) {
 
 /*******************************************************************/
 ENS16X_status_t ENS16X_HW_de_init(void) {
-    return ((ENS16X_status_t) SENSORS_HW_de_init(ERROR_BASE_ENS160 + ENS16X_ERROR_BASE_I2C));
+    return ((ENS16X_status_t) SENSORS_HW_de_init(ERROR_BASE_ENS16X + ENS16X_ERROR_BASE_I2C));
 }
 
 /*******************************************************************/

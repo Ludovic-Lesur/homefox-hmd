@@ -113,7 +113,7 @@ void POWER_enable(POWER_requester_id_t requester_id, POWER_domain_t domain, LPTI
 #endif
 #ifdef HMD_ENS16X_ENABLE
         ens16x_status = ENS16X_init();
-        _POWER_stack_driver_error(ens16x_status, ENS16X_SUCCESS, ERROR_BASE_ENS160, POWER_ERROR_DRIVER_ENS16X);
+        _POWER_stack_driver_error(ens16x_status, ENS16X_SUCCESS, ERROR_BASE_ENS16X, POWER_ERROR_DRIVER_ENS16X);
 #endif
 #ifdef HMD_FXLS89XXXX_ENABLE
         fxls89xxxx_status = FXLS89XXXX_init();
@@ -208,7 +208,7 @@ void POWER_disable(POWER_requester_id_t requester_id, POWER_domain_t domain) {
 #endif
 #ifdef HMD_ENS16X_ENABLE
         ens16x_status = ENS16X_de_init();
-        _POWER_stack_driver_error(ens16x_status, ENS16X_SUCCESS, ERROR_BASE_ENS160, POWER_ERROR_DRIVER_ENS16X);
+        _POWER_stack_driver_error(ens16x_status, ENS16X_SUCCESS, ERROR_BASE_ENS16X, POWER_ERROR_DRIVER_ENS16X);
 #endif
 #ifdef HMD_FXLS89XXXX_ENABLE
         fxls89xxxx_status = FXLS89XXXX_de_init();

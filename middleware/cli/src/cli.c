@@ -500,7 +500,7 @@ static AT_status_t _CLI_aqs_control_callback(void) {
     if (state == 0) {
         // Stop acquisition.
         ens16x_status = ENS16X_stop_acquisition(I2C_ADDRESS_ENS16X);
-        _CLI_check_driver_status(ens16x_status, ENS16X_SUCCESS, ERROR_BASE_ENS160);
+        _CLI_check_driver_status(ens16x_status, ENS16X_SUCCESS, ERROR_BASE_ENS16X);
         // Turn digital sensors off.
         POWER_disable(POWER_REQUESTER_ID_CLI_AQS, POWER_DOMAIN_SENSORS);
         // Reset operating time.
@@ -521,7 +521,7 @@ static AT_status_t _CLI_aqs_control_callback(void) {
 #endif
         // Start acquisition.
         ens16x_status = ENS16X_start_acquisition(I2C_ADDRESS_ENS16X, ENS16X_SENSING_MODE_STANDARD, temperature_tenth_degrees, humidity_percent);
-        _CLI_check_driver_status(ens16x_status, ENS16X_SUCCESS, ERROR_BASE_ENS160);
+        _CLI_check_driver_status(ens16x_status, ENS16X_SUCCESS, ERROR_BASE_ENS16X);
         // Update start time if needed.
         if (cli_ctx.aqs_running_flag == 0) {
             cli_ctx.aqs_start_time = RTC_get_uptime_seconds();
@@ -551,7 +551,7 @@ static AT_status_t _CLI_aqs_status_callback(void) {
     }
     // Read air quality data.
     ens160_status = ENS16X_get_device_status(I2C_ADDRESS_ENS16X, &ens160_device_status);
-    _CLI_check_driver_status(ens160_status, ENS16X_SUCCESS, ERROR_BASE_ENS160);
+    _CLI_check_driver_status(ens160_status, ENS16X_SUCCESS, ERROR_BASE_ENS16X);
     // Print status.
     AT_reply_add_string("status=");
     AT_reply_add_integer((ens160_device_status.all), STRING_FORMAT_HEXADECIMAL, 1);
@@ -582,7 +582,7 @@ static AT_status_t _CLI_aqs_read_callback(void) {
     }
     // Read air quality data.
     ens160_status = ENS16X_read_air_quality(I2C_ADDRESS_ENS16X, &air_quality_data);
-    _CLI_check_driver_status(ens160_status, ENS16X_SUCCESS, ERROR_BASE_ENS160);
+    _CLI_check_driver_status(ens160_status, ENS16X_SUCCESS, ERROR_BASE_ENS16X);
     // Print data.
     // Air quality index.
     AT_reply_add_string("AQI_UBA=");
