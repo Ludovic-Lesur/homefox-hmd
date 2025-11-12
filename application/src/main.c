@@ -11,6 +11,7 @@
 #include "i2c_address.h"
 #include "iwdg.h"
 #include "lptim.h"
+#include "mcu_mapping.h"
 #include "nvic.h"
 #include "nvic_priority.h"
 #include "pwr.h"
@@ -20,6 +21,8 @@
 #include "error.h"
 #include "types.h"
 // Components.
+#include "fxls89xxxx.h"
+#include "fxls89xxxx_configuration.h"
 #include "led.h"
 #include "sensors_hw.h"
 // Middleware
@@ -69,17 +72,18 @@
 /*******************************************************************/
 typedef enum {
     HMD_STATE_STARTUP,
-    HMD_STATE_WAKEUP,
-    HMD_STATE_BUTTON,
-    HMD_STATE_MEASURE,
-    HMD_STATE_MONITORING_DATA,
+    HMD_STATE_MONITORING,
 #ifdef HMD_ENS16X_ENABLE
-    HMD_STATE_AIR_QUALITY_DATA,
+    HMD_STATE_AIR_QUALITY,
 #endif
 #ifdef HMD_FXLS89XXXX_ENABLE
-    HMD_STATE_ACCELEROMETER_DATA,
+    HMD_STATE_ACCELEROMETER,
+#endif
+#ifdef HMD_BUTTON_ENABLE
+    HMD_STATE_BUTTON,
 #endif
     HMD_STATE_ERROR_STACK,
+    HMD_STATE_TASK_CHECK,
     HMD_STATE_SLEEP,
     HMD_STATE_LAST
 } HMD_state_t;
@@ -103,9 +107,9 @@ typedef union {
     uint8_t all;
     struct {
         unsigned radio_enabled : 1;
-        unsigned error_stack_request :1;
-        unsigned accelerometer_request :1;
+        unsigned air_quality_request :1;
         unsigned button_request :1;
+        unsigned error_stack_request :1;
         unsigned monitoring_request :1;
     } __attribute__((scalar_storage_order("big-endian"))) __attribute__((packed));
 } HMD_flags_t;
@@ -157,7 +161,7 @@ typedef union {
     struct {
         unsigned event_source :8;
     } __attribute__((scalar_storage_order("big-endian"))) __attribute__((packed));
-} HMD_sigfox_accelerometer_data_t;
+} HMD_sigfox_accelerometer_event_data_t;
 #endif
 
 /*******************************************************************/
@@ -166,8 +170,21 @@ typedef struct {
     HMD_state_t state;
     HMD_status_t status;
     volatile HMD_flags_t flags;
+    uint16_t vbatt_mv;
+    uint16_t tamb_tenth_degrees;
+    uint8_t hamb_percent;
     uint32_t monitoring_next_time_seconds;
     uint32_t error_stack_next_time_seconds;
+#ifdef HMD_ENS16X_ENABLE
+    uint32_t air_quality_next_time_seconds;
+    uint32_t air_quality_acquisition_time_ms;
+    ENS16X_device_status_t air_quality_acquisition_status;
+    ENS16X_air_quality_data_t air_quality_data;
+#endif
+#ifdef HMD_FXLS89XXXX_ENABLE
+    uint8_t accelerometer_state;
+    uint32_t accelerometer_last_event_time_seconds;
+#endif
 } HMD_context_t;
 
 /*** MAIN local global variables ***/
@@ -178,17 +195,10 @@ static HMD_context_t hmd_ctx;
 
 /*** MAIN local functions ***/
 
-#ifndef HMD_MODE_CLI
+#if ((defined HMD_BUTTON_ENABLE) && !(defined HMD_MODE_CLI))
 /*******************************************************************/
 static void _HMD_button_irq_callback(void) {
     hmd_ctx.flags.button_request = 1;
-}
-#endif
-
-#if (!(defined HMD_MODE_CLI) && (defined HMD_FXLS89XXXX_ENABLE))
-/*******************************************************************/
-static void _HMD_motion_irq_callback(void) {
-    hmd_ctx.flags.accelerometer_request = 1;
 }
 #endif
 
@@ -197,12 +207,15 @@ static void _HMD_motion_irq_callback(void) {
 static void _HMD_init_context(void) {
     // Init context.
     hmd_ctx.state = HMD_STATE_STARTUP;
+    hmd_ctx.status.all = 0;
     hmd_ctx.flags.all = 0;
     hmd_ctx.flags.radio_enabled = 1;
     hmd_ctx.flags.error_stack_request = 1;
+    hmd_ctx.vbatt_mv = HMD_ERROR_VALUE_ANALOG_16BITS;
+    hmd_ctx.tamb_tenth_degrees = HMD_ERROR_VALUE_TEMPERATURE;
+    hmd_ctx.hamb_percent = HMD_ERROR_VALUE_HUMIDITY;
     hmd_ctx.monitoring_next_time_seconds = HMD_MONITORING_PERIOD_SECONDS;
     hmd_ctx.error_stack_next_time_seconds = HMD_ERROR_STACK_PERIOD_SECONDS;
-    hmd_ctx.status.all = 0;
 #ifdef HMD_SHT3X_ENABLE
     hmd_ctx.status.sht3x_enable = 1;
 #endif
@@ -211,11 +224,12 @@ static void _HMD_init_context(void) {
 #endif
 #ifdef HMD_ENS16X_ENABLE
     hmd_ctx.status.ens16x_enable = 1;
+    hmd_ctx.air_quality_next_time_seconds = HMD_AIR_QUALITY_PERIOD_SECONDS;
 #endif
 #ifdef HMD_FXLS89XXXX_ENABLE
     hmd_ctx.status.fxls89xxxx_enable = 1;
-    // Set motion interrupt callback address.
-    SENSORS_HW_set_accelerometer_irq_callback(&_HMD_motion_irq_callback);
+    hmd_ctx.accelerometer_state = 0;
+    hmd_ctx.accelerometer_last_event_time_seconds = 0;
 #endif
 }
 #endif
@@ -230,7 +244,7 @@ static void _HMD_init_hw(void) {
 #ifndef HMD_MODE_DEBUG
     IWDG_status_t iwdg_status = IWDG_SUCCESS;
 #endif
-#ifndef HMD_MODE_CLI
+#if ((defined HMD_BUTTON_ENABLE) && !(defined HMD_MODE_CLI))
     BUTTON_status_t button_status = BUTTON_SUCCESS;
 #endif
     // Init error stack
@@ -264,13 +278,164 @@ static void _HMD_init_hw(void) {
     lptim_status = LPTIM_init(NVIC_PRIORITY_DELAY);
     LPTIM_stack_error(ERROR_BASE_LPTIM);
     // Init HMI.
-#ifndef HMD_MODE_CLI
+#if ((defined HMD_BUTTON_ENABLE) && !(defined HMD_MODE_CLI))
     button_status = BUTTON_init(&_HMD_button_irq_callback);
     BUTTON_stack_error(ERROR_BASE_BUTTON);
 #endif
     led_status = LED_init();
     LED_stack_error(ERROR_BASE_LED);
 }
+
+#ifndef HMD_MODE_CLI
+/*******************************************************************/
+static void _HMD_update_battery_voltage(void) {
+    // Local variables.
+    ANALOG_status_t analog_status = ANALOG_SUCCESS;
+    int32_t vbatt = 0;
+    // Turn ADC on.
+    POWER_enable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_ANALOG, LPTIM_DELAY_MODE_ACTIVE);
+    // Perform battery voltage measurement.
+    analog_status = ANALOG_convert_channel(ANALOG_CHANNEL_VBATT_MV, &vbatt);
+    ANALOG_stack_error(ERROR_BASE_ANALOG);
+    if (analog_status == ANALOG_SUCCESS) {
+        // Voltage hysteresis for radio.
+        if (vbatt < HMD_RADIO_OFF_VSTR_THRESHOLD_MV) {
+            hmd_ctx.flags.radio_enabled = 0;
+        }
+        if (vbatt > HMD_RADIO_ON_VSTR_THRESHOLD_MV) {
+            hmd_ctx.flags.radio_enabled = 1;
+        }
+        // Update data.
+        hmd_ctx.vbatt_mv = (uint16_t) vbatt;
+    }
+    // Turn ADC off.
+    POWER_disable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_ANALOG);
+}
+#endif
+
+#ifndef HMD_MODE_CLI
+/*******************************************************************/
+static void _HMD_update_temperature_humidity(void) {
+    // Local variables.
+    MATH_status_t math_status = MATH_SUCCESS;
+#ifdef HMD_SHT3X_ENABLE
+    SHT3X_status_t sht3x_status = SHT3X_SUCCESS;
+#endif
+#ifdef HMD_ENS21X_ENABLE
+    ENS21X_status_t ens21x_status = ENS21X_SUCCESS;
+#endif
+    int32_t temperature = 0;
+    uint32_t temperature_signed_magnitude;
+    int32_t humidity = 0;
+    // Reset data.
+    hmd_ctx.tamb_tenth_degrees = HMD_ERROR_VALUE_TEMPERATURE;
+    hmd_ctx.hamb_percent = HMD_ERROR_VALUE_HUMIDITY;
+    // Turn sensors on.
+    POWER_enable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_STOP);
+#ifdef HMD_ENS21X_ENABLE
+    // Get temperature and humidity from ENS210.
+    ens21x_status = ENS21X_get_temperature_humidity(I2C_ADDRESS_ENS210, &temperature, &humidity);
+    ENS21X_stack_error(ERROR_BASE_ENS210);
+    // Check status.
+    if (ens21x_status == ENS21X_SUCCESS) {
+       // Convert temperature.
+       math_status = MATH_integer_to_signed_magnitude(temperature, 11, &temperature_signed_magnitude);
+       MATH_stack_error(ERROR_BASE_MATH);
+       if (math_status == MATH_SUCCESS) {
+           hmd_ctx.tamb_tenth_degrees = (uint16_t) temperature_signed_magnitude;
+       }
+       hmd_ctx.hamb_percent = (uint8_t) humidity;
+    }
+#endif
+#ifdef HMD_SHT3X_ENABLE
+    if ((hmd_ctx.tamb_tenth_degrees == HMD_ERROR_VALUE_TEMPERATURE) || (hmd_ctx.hamb_percent == HMD_ERROR_VALUE_HUMIDITY)) {
+        // Get temperature and humidity from SHT30.
+        sht3x_status = SHT3X_get_temperature_humidity(I2C_ADDRESS_SHT30, &temperature, &humidity);
+        SHT3X_stack_error(ERROR_BASE_SHT30);
+        // Check status.
+        if (sht3x_status == SHT3X_SUCCESS) {
+           // Convert temperature.
+           math_status = MATH_integer_to_signed_magnitude(temperature, 11, &temperature_signed_magnitude);
+           MATH_stack_error(ERROR_BASE_MATH);
+           if (math_status == MATH_SUCCESS) {
+               hmd_ctx.tamb_tenth_degrees = (uint16_t) temperature_signed_magnitude;
+           }
+           hmd_ctx.hamb_percent = (uint8_t) humidity;
+        }
+    }
+#endif
+    // Turn sensors off.
+    POWER_disable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS);
+}
+#endif
+
+#if (!(defined HMD_MODE_CLI) & (defined HMD_ENS16X_ENABLE))
+/*******************************************************************/
+static void _HMD_update_air_quality(void) {
+    // Local variables.
+    ENS16X_status_t ens16x_status = ENS16X_SUCCESS;
+    LPTIM_status_t lptim_status = LPTIM_SUCCESS;
+    ENS16X_air_quality_data_t air_quality_data;
+    // Reset data.
+    hmd_ctx.air_quality_acquisition_time_ms = 0;
+    hmd_ctx.air_quality_acquisition_status.validity_flag = ENS16X_VALIDITY_FLAG_INVALID_OUTPUT;
+    hmd_ctx.air_quality_data.tvoc_ppb = HMD_ERROR_VALUE_TVOC;
+    hmd_ctx.air_quality_data.eco2_ppm = HMD_ERROR_VALUE_ECO2;
+    hmd_ctx.air_quality_data.aqi_uba = HMD_ERROR_VALUE_AQI_UBA;
+#ifdef ENS16X_DRIVER_DEVICE_ENS161
+    hmd_ctx.air_quality_data.aqi_s = HMD_ERROR_VALUE_AQI_S;
+#endif
+    // Check if temperature and humidity are available.
+    if ((hmd_ctx.tamb_tenth_degrees == HMD_ERROR_VALUE_TEMPERATURE) || (hmd_ctx.hamb_percent == HMD_ERROR_VALUE_HUMIDITY)) goto errors;
+    // Turn sensors on.
+    POWER_enable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_STOP);
+    // Start acquisition.
+    ens16x_status = ENS16X_start_acquisition(I2C_ADDRESS_ENS16X, HMD_ENS16X_ACQUISITION_MODE, hmd_ctx.tamb_tenth_degrees, hmd_ctx.hamb_percent);
+    ENS16X_stack_error(ERROR_BASE_ENS16X);
+    // Directly exit in case of error.
+    if (ens16x_status == ENS16X_SUCCESS) {
+        // Wait for acquisition time.
+        do {
+            // Reload watchdog.
+            IWDG_reload();
+            // Low power delay.
+            lptim_status = LPTIM_delay_milliseconds(HMD_ENS16X_ACQUISITION_DELAY_MS, LPTIM_DELAY_MODE_STOP);
+            LPTIM_stack_error(ERROR_BASE_LPTIM);
+            // Update duration.
+            hmd_ctx.air_quality_acquisition_time_ms += HMD_ENS16X_ACQUISITION_DELAY_MS;
+            // Read device status.
+            ens16x_status = ENS16X_get_device_status(I2C_ADDRESS_ENS16X, &hmd_ctx.air_quality_acquisition_status);
+            ENS16X_stack_error(ERROR_BASE_ENS16X);
+            // Check status.
+            if (ens16x_status != ENS16X_SUCCESS) break;
+            // Check data validity.
+            if (hmd_ctx.air_quality_acquisition_status.validity_flag == ENS16X_VALIDITY_FLAG_NORMAL_OPERATION) {
+                // Read data.
+                ens16x_status = ENS16X_read_air_quality(I2C_ADDRESS_ENS16X, &air_quality_data);
+                ENS16X_stack_error(ERROR_BASE_ENS16X);
+                // Check status.
+                if (ens16x_status == ENS16X_SUCCESS) {
+                    hmd_ctx.air_quality_data.tvoc_ppb = (air_quality_data.tvoc_ppb);
+                    hmd_ctx.air_quality_data.eco2_ppm = (air_quality_data.eco2_ppm);
+                    hmd_ctx.air_quality_data.aqi_uba = (air_quality_data.aqi_uba);
+#ifdef ENS16X_DRIVER_DEVICE_ENS161
+                    hmd_ctx.air_quality_data.aqi_s = (air_quality_data.aqi_s);
+#endif
+                }
+                break;
+            }
+        }
+        while (hmd_ctx.air_quality_acquisition_time_ms < HMD_ENS16X_ACQUISITION_TIMEOUT_MS);
+        // Stop acquisition.
+        ens16x_status = ENS16X_stop_acquisition(I2C_ADDRESS_ENS16X);
+        ENS16X_stack_error(ERROR_BASE_ENS16X);
+        // Turn sensors off.
+        POWER_disable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS);
+    }
+errors:
+    return;
+}
+#endif
 
 #ifndef HMD_MODE_CLI
 /*******************************************************************/
@@ -311,33 +476,21 @@ int main(void) {
     _HMD_init_hw();
     // Local variables.
     RCC_status_t rcc_status = RCC_SUCCESS;
-    ANALOG_status_t analog_status = ANALOG_SUCCESS;
-    MATH_status_t math_status = MATH_SUCCESS;
     ERROR_code_t error_code = 0;
     HMD_sigfox_startup_data_t sigfox_startup_data;
     HMD_sigfox_monitoring_data_t sigfox_monitoring_data;
-#ifdef HMD_SHT3X_ENABLE
-    SHT3X_status_t sht3x_status = SHT3X_SUCCESS;
-#endif
-#ifdef HMD_ENS21X_ENABLE
-    ENS21X_status_t ens21x_status = ENS21X_SUCCESS;
-#endif
+    SIGFOX_EP_API_application_message_t application_message;
+    uint8_t sigfox_error_stack_data[HMD_SIGFOX_ERROR_STACK_DATA_SIZE];
 #ifdef HMD_ENS16X_ENABLE
-    ENS16X_status_t ens16x_status = ENS16X_SUCCESS;
-    LPTIM_status_t lptim_status = LPTIM_SUCCESS;
-    ENS16X_device_status_t ens16x_device_status;
-    uint32_t ens16x_acquisition_time_ms = 0;
-    ENS16X_air_quality_data_t air_quality_data;
     HMD_sigfox_air_quality_data_t sigfox_air_quality_data;
 #endif
 #ifdef HMD_FXLS89XXXX_ENABLE
-    HMD_sigfox_accelerometer_data_t sigfox_accelerometer_data;
+    FXLS89XXXX_status_t fxls89xxxx_status = FXLS89XXXX_SUCCESS;
+    FXLS89XXXX_int_src1_t fxls89xxxx_int_src1;
+    FXLS89XXXX_int_src2_t fxls89xxxx_int_src2;
+    HMD_sigfox_accelerometer_event_data_t sigfox_accelerometer_event_data;
 #endif
-    SIGFOX_EP_API_application_message_t application_message;
-    uint8_t sigfox_error_stack_data[HMD_SIGFOX_ERROR_STACK_DATA_SIZE];
     uint8_t idx = 0;
-    int32_t generic_s32_1 = 0;
-    int32_t generic_s32_2 = 0;
     uint8_t generic_u8;
     uint32_t generic_u32 = 0;
     // Application message default parameters.
@@ -372,201 +525,96 @@ int main(void) {
             // Compute next state.
             hmd_ctx.state = HMD_STATE_ERROR_STACK;
             break;
-        case HMD_STATE_WAKEUP:
+        case HMD_STATE_MONITORING:
             IWDG_reload();
-            // Calibrate clocks.
-            rcc_status = RCC_calibrate_internal_clocks(NVIC_PRIORITY_CLOCK_CALIBRATION);
-            RCC_stack_error(ERROR_BASE_RCC);
-            // Compute next state.
-            if (hmd_ctx.flags.accelerometer_request != 0) {
-                // Clear flag and update state.
-                hmd_ctx.flags.accelerometer_request = 0;
-#ifdef HMD_FXLS89XXXX_ENABLE
-                hmd_ctx.state = HMD_STATE_ACCELEROMETER_DATA;
-#else
-                hmd_ctx.state = HMD_STATE_SLEEP;
-#endif
-            }
-            else if (hmd_ctx.flags.button_request != 0) {
-                // Clear flag and update state.
-                hmd_ctx.flags.button_request = 0;
-                hmd_ctx.state = HMD_STATE_BUTTON;
-            }
-            else if (hmd_ctx.flags.monitoring_request != 0) {
-                // Clear flag and update state.
-                hmd_ctx.flags.monitoring_request = 0;
-                hmd_ctx.state = HMD_STATE_MEASURE;
-            }
-            else {
-                hmd_ctx.state = HMD_STATE_SLEEP;
-            }
-            break;
-        case HMD_STATE_BUTTON:
-            IWDG_reload();
-            // TODO
-            // Compute next state.
-            hmd_ctx.state = HMD_STATE_SLEEP;
-            break;
-        case HMD_STATE_MEASURE:
-            IWDG_reload();
-            // Reset frames.
-            sigfox_monitoring_data.status = 0;
-            sigfox_monitoring_data.unused = 0;
-            sigfox_monitoring_data.vbatt_mv = HMD_ERROR_VALUE_ANALOG_16BITS;
-            sigfox_monitoring_data.tamb_tenth_degrees = HMD_ERROR_VALUE_TEMPERATURE;
-            sigfox_monitoring_data.hamb_percent = HMD_ERROR_VALUE_HUMIDITY;
-#ifdef HMD_ENS16X_ENABLE
-            sigfox_air_quality_data.acquisition_duration_tens_seconds = 0;
-            sigfox_air_quality_data.acquisition_status = ENS16X_VALIDITY_FLAG_INVALID_OUTPUT;
-            sigfox_air_quality_data.tvoc_ppb = HMD_ERROR_VALUE_TVOC;
-            sigfox_air_quality_data.eco2_ppm = HMD_ERROR_VALUE_ECO2;
-            sigfox_air_quality_data.aqi_uba = HMD_ERROR_VALUE_AQI_UBA;
-            sigfox_air_quality_data.aqi_s = HMD_ERROR_VALUE_AQI_S;
-#endif
-            // Turn sensors on.
-            POWER_enable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_STOP);
-#ifdef HMD_ENS21X_ENABLE
-            // Get temperature and humidity from ENS210.
-            ens21x_status = ENS21X_get_temperature_humidity(I2C_ADDRESS_ENS210, &generic_s32_1, &generic_s32_2);
-            ENS21X_stack_error(ERROR_BASE_ENS210);
-            // Check status.
-            if (ens21x_status == ENS21X_SUCCESS) {
-               // Convert temperature.
-               math_status = MATH_integer_to_signed_magnitude(generic_s32_1, 11, &generic_u32);
-               MATH_stack_error(ERROR_BASE_MATH);
-               if (math_status == MATH_SUCCESS) {
-                   sigfox_monitoring_data.tamb_tenth_degrees = (uint8_t) generic_u32;
-               }
-               sigfox_monitoring_data.hamb_percent = (uint8_t) generic_s32_2;
-            }
-#endif
-#ifdef HMD_SHT3X_ENABLE
-            if ((sigfox_monitoring_data.tamb_tenth_degrees == HMD_ERROR_VALUE_TEMPERATURE) || (sigfox_monitoring_data.hamb_percent == HMD_ERROR_VALUE_HUMIDITY)) {
-                // Get temperature and humidity from SHT30.
-                sht3x_status = SHT3X_get_temperature_humidity(I2C_ADDRESS_SHT30, &generic_s32_1, &generic_s32_2);
-                SHT3X_stack_error(ERROR_BASE_SHT30);
-                // Check status.
-                if (sht3x_status == SHT3X_SUCCESS) {
-                   // Convert temperature.
-                   math_status = MATH_integer_to_signed_magnitude(generic_s32_1, 11, &generic_u32);
-                   MATH_stack_error(ERROR_BASE_MATH);
-                   if (math_status == MATH_SUCCESS) {
-                       sigfox_monitoring_data.tamb_tenth_degrees = (uint8_t) generic_u32;
-                   }
-                   sigfox_monitoring_data.hamb_percent = (uint8_t) generic_s32_2;
-                }
-            }
-#endif
-#ifdef HMD_ENS16X_ENABLE
-            if ((sigfox_monitoring_data.tamb_tenth_degrees != HMD_ERROR_VALUE_TEMPERATURE) && (sigfox_monitoring_data.hamb_percent != HMD_ERROR_VALUE_HUMIDITY)) {
-                // Reset duration.
-                ens16x_acquisition_time_ms = 0;
-                // Start acquisition.
-                ens16x_status = ENS16X_start_acquisition(I2C_ADDRESS_ENS16X, HMD_ENS16X_ACQUISITION_MODE, sigfox_monitoring_data.tamb_tenth_degrees, sigfox_monitoring_data.hamb_percent);
-                ENS16X_stack_error(ERROR_BASE_ENS16X);
-                // Directly exit in case of error.
-                if (ens16x_status == ENS16X_SUCCESS) {
-                    // Wait for acquisition time.
-                    do {
-                        // Reload watchdog.
-                        IWDG_reload();
-                        // Low power delay.
-                        lptim_status = LPTIM_delay_milliseconds(HMD_ENS16X_ACQUISITION_DELAY_MS, LPTIM_DELAY_MODE_STOP);
-                        LPTIM_stack_error(ERROR_BASE_LPTIM);
-                        // Update duration.
-                        ens16x_acquisition_time_ms += HMD_ENS16X_ACQUISITION_DELAY_MS;
-                        // Read device status.
-                        ens16x_status = ENS16X_get_device_status(I2C_ADDRESS_ENS16X, &ens16x_device_status);
-                        ENS16X_stack_error(ERROR_BASE_ENS16X);
-                        // Check status.
-                        if (ens16x_status != ENS16X_SUCCESS) break;
-                        // Check data validity.
-                        if (ens16x_device_status.validity_flag == ENS16X_VALIDITY_FLAG_NORMAL_OPERATION) {
-                            // Read data.
-                            ens16x_status = ENS16X_read_air_quality(I2C_ADDRESS_ENS16X, &air_quality_data);
-                            ENS16X_stack_error(ERROR_BASE_ENS16X);
-                            // Check status.
-                            if (ens16x_status == ENS16X_SUCCESS) {
-                                sigfox_air_quality_data.tvoc_ppb = (air_quality_data.tvoc_ppb);
-                                sigfox_air_quality_data.eco2_ppm = (air_quality_data.eco2_ppm);
-                                sigfox_air_quality_data.aqi_uba = (air_quality_data.aqi_uba);
-#ifdef ENS16X_DRIVER_DEVICE_ENS161
-                                sigfox_air_quality_data.aqi_s = (air_quality_data.aqi_s);
-#endif
-                            }
-                            break;
-                        }
-                    }
-                    while (ens16x_acquisition_time_ms < HMD_ENS16X_ACQUISITION_TIMEOUT_MS);
-                    // Stop acquisition.
-                    ens16x_status = ENS16X_stop_acquisition(I2C_ADDRESS_ENS16X);
-                    ENS16X_stack_error(ERROR_BASE_ENS16X);
-                    // Update status.
-                    sigfox_air_quality_data.acquisition_duration_tens_seconds = (ens16x_acquisition_time_ms / 10000);
-                    sigfox_air_quality_data.acquisition_status = ens16x_device_status.validity_flag;
-                }
-            }
-#endif
-            // Turn sensors off.
-            POWER_disable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS);
-            // Get voltages measurements.
-            POWER_enable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_ANALOG, LPTIM_DELAY_MODE_ACTIVE);
-            analog_status = ANALOG_convert_channel(ANALOG_CHANNEL_VBATT_MV, &generic_s32_1);
-            ANALOG_stack_error(ERROR_BASE_ANALOG);
-            if (analog_status == ANALOG_SUCCESS) {
-                // Update data.
-                sigfox_monitoring_data.vbatt_mv = (uint16_t) generic_s32_1;
-                // Voltage hysteresis for radio.
-                if (generic_s32_1 < HMD_RADIO_OFF_VSTR_THRESHOLD_MV) {
-                    hmd_ctx.flags.radio_enabled = 0;
-                }
-                if (generic_s32_1 > HMD_RADIO_ON_VSTR_THRESHOLD_MV) {
-                    hmd_ctx.flags.radio_enabled = 1;
-                }
-
-            }
-            POWER_disable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_ANALOG);
-            // Get clock status.
+            // Measure related data.
+            _HMD_update_battery_voltage();
+            _HMD_update_temperature_humidity();
+            // Update status.
             rcc_status = RCC_get_status(RCC_CLOCK_LSI, &generic_u8);
             RCC_stack_error(ERROR_BASE_RCC);
             hmd_ctx.status.lsi_status = (generic_u8 == 0) ? 0b0 : 0b1;
             rcc_status = RCC_get_status(RCC_CLOCK_LSE, &generic_u8);
             RCC_stack_error(ERROR_BASE_RCC);
             hmd_ctx.status.lse_status = (generic_u8 == 0) ? 0b0 : 0b1;
-            // Update status.
+            // Build frame.
             sigfox_monitoring_data.status = hmd_ctx.status.all;
-            // Compute next state.
-            hmd_ctx.state = HMD_STATE_MONITORING_DATA;
-            break;
-        case HMD_STATE_MONITORING_DATA:
-            IWDG_reload();
+            sigfox_monitoring_data.vbatt_mv = hmd_ctx.vbatt_mv;
+            sigfox_monitoring_data.unused = 0;
+            sigfox_monitoring_data.tamb_tenth_degrees = hmd_ctx.tamb_tenth_degrees;
+            sigfox_monitoring_data.hamb_percent = hmd_ctx.hamb_percent;
             // Send uplink monitoring frame.
             application_message.ul_payload = (sfx_u8*) (sigfox_monitoring_data.frame);
             application_message.ul_payload_size_bytes = HMD_SIGFOX_MONITORING_DATA_SIZE;
             _HMD_send_sigfox_message(&application_message);
+            // Clear flag.
+            hmd_ctx.flags.monitoring_request = 0;
             // Compute next state.
-#ifdef HMD_ENS16X_ENABLE
-            hmd_ctx.state = HMD_STATE_AIR_QUALITY_DATA;
-#else
             hmd_ctx.state = HMD_STATE_ERROR_STACK;
-#endif
             break;
 #ifdef HMD_ENS16X_ENABLE
-        case HMD_STATE_AIR_QUALITY_DATA:
-            // Send uplink monitoring frame.
+        case HMD_STATE_AIR_QUALITY:
+            IWDG_reload();
+            // Measure related data.
+            _HMD_update_temperature_humidity();
+            _HMD_update_air_quality();
+            // Build frame.
+            sigfox_air_quality_data.acquisition_duration_tens_seconds = (hmd_ctx.air_quality_acquisition_time_ms / 10000);
+            sigfox_air_quality_data.acquisition_status = hmd_ctx.air_quality_acquisition_status.validity_flag;
+            sigfox_air_quality_data.tvoc_ppb = hmd_ctx.air_quality_data.tvoc_ppb;
+            sigfox_air_quality_data.eco2_ppm = hmd_ctx.air_quality_data.eco2_ppm;
+            sigfox_air_quality_data.aqi_uba = hmd_ctx.air_quality_data.aqi_uba;
+#ifdef ENS16X_DRIVER_DEVICE_ENS161
+            sigfox_air_quality_data.aqi_s = hmd_ctx.air_quality_data.aqi_s;
+#else
+            sigfox_air_quality_data.aqi_s = HMD_ERROR_VALUE_AQI_S;
+#endif
+            // Send uplink air quality frame.
             application_message.ul_payload = (sfx_u8*) (sigfox_air_quality_data.frame);
             application_message.ul_payload_size_bytes = HMD_SIGFOX_AIR_QUALITY_DATA_SIZE;
             _HMD_send_sigfox_message(&application_message);
+            // Clear flag.
+            hmd_ctx.flags.air_quality_request = 0;
             // Compute next state.
             hmd_ctx.state = HMD_STATE_ERROR_STACK;
             break;
 #endif
 #ifdef HMD_FXLS89XXXX_ENABLE
-        case HMD_STATE_ACCELEROMETER_DATA:
+        case HMD_STATE_ACCELEROMETER:
+            IWDG_reload();
+            // Update accelerometer state and last event time.
+            hmd_ctx.accelerometer_state = 0;
+            hmd_ctx.accelerometer_last_event_time_seconds = RTC_get_uptime_seconds();
+            // Disable interrupt on MCU side.
+            SENSORS_HW_disable_accelerometer_interrupt();
+            // Turn sensors on.
+            POWER_enable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_STOP);
+            // Disable accelerometer.
+            fxls89xxxx_status = FXLS89XXXX_write_configuration(I2C_ADDRESS_FXLS8974CF, FXLS89XXXX_SLEEP_CONFIGURATION, FXLS89XXXX_SLEEP_CONFIGURATION_SIZE);
+            FXLS89XXXX_stack_error(ERROR_BASE_FXLS8974CF);
+            // Read interrupt status.
+            fxls89xxxx_status = FXLS89XXXX_clear_interrupt(I2C_ADDRESS_FXLS8974CF, &fxls89xxxx_int_src1, &fxls89xxxx_int_src2);
+            FXLS89XXXX_stack_error(ERROR_BASE_FXLS8974CF);
+            // Turn sensors off.
+            POWER_disable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS);
+            // Check status.
+            sigfox_accelerometer_event_data.event_source = ((fxls89xxxx_status == FXLS89XXXX_SUCCESS) ? (fxls89xxxx_int_src1.all) : 0);
+            // Send uplink air quality frame.
+            application_message.ul_payload = (sfx_u8*) (sigfox_accelerometer_event_data.frame);
+            application_message.ul_payload_size_bytes = HMD_SIGFOX_ACCELEROMETER_EVENT_DATA_SIZE;
+            _HMD_send_sigfox_message(&application_message);
+            // Compute next state.
+            hmd_ctx.state = HMD_STATE_TASK_CHECK;
+            break;
+#endif
+#ifdef HMD_BUTTON_ENABLE
+        case HMD_STATE_BUTTON:
             IWDG_reload();
             // TODO
+            // Clear flag.
+            hmd_ctx.flags.button_request = 0;
             // Compute next state.
-            hmd_ctx.state = HMD_STATE_SLEEP;
+            hmd_ctx.state = HMD_STATE_TASK_CHECK;
             break;
 #endif
         case HMD_STATE_ERROR_STACK:
@@ -593,12 +641,9 @@ int main(void) {
                 }
             }
             // Compute next state.
-            hmd_ctx.state = HMD_STATE_SLEEP;
+            hmd_ctx.state = HMD_STATE_TASK_CHECK;
             break;
-        case HMD_STATE_SLEEP:
-            // Enter stop mode.
-            IWDG_reload();
-            PWR_enter_deepsleep_mode(PWR_DEEPSLEEP_MODE_STOP);
+        case HMD_STATE_TASK_CHECK:
             IWDG_reload();
             // Read uptime.
             generic_u32 = RTC_get_uptime_seconds();
@@ -613,15 +658,70 @@ int main(void) {
                hmd_ctx.flags.error_stack_request = 1;
                hmd_ctx.error_stack_next_time_seconds = (generic_u32 + HMD_ERROR_STACK_PERIOD_SECONDS);
             }
-            // Check wake-up flags.
-            if ((hmd_ctx.flags.monitoring_request != 0) || (hmd_ctx.flags.button_request != 0) || (hmd_ctx.flags.accelerometer_request != 0)) {
-                // Turn device on.
-                hmd_ctx.state = HMD_STATE_WAKEUP;
+#ifdef HMD_ENS16X_ENABLE
+            if (generic_u32 >= hmd_ctx.air_quality_next_time_seconds) {
+               // Set periodic request and compute next time.
+               hmd_ctx.flags.air_quality_request = 1;
+               hmd_ctx.air_quality_next_time_seconds = (generic_u32 + HMD_AIR_QUALITY_PERIOD_SECONDS);
             }
+#endif
+#ifdef HMD_FXLS89XXXX_ENABLE
+            // Check accelerometer blanking time.
+            if ((generic_u32 >= (hmd_ctx.accelerometer_last_event_time_seconds + HMD_FXLS89XXXX_BLANKING_TIME_SECONDS)) && (hmd_ctx.accelerometer_state == 0)) {
+                // Turn sensors on.
+                POWER_enable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_STOP);
+                // Clear interrupt.
+                fxls89xxxx_status = FXLS89XXXX_clear_interrupt(I2C_ADDRESS_FXLS8974CF, &fxls89xxxx_int_src1, &fxls89xxxx_int_src2);
+                FXLS89XXXX_stack_error(ERROR_BASE_FXLS8974CF);
+                // Enable accelerometer.
+                fxls89xxxx_status = FXLS89XXXX_write_configuration(I2C_ADDRESS_FXLS8974CF, FXLS89XXXX_ACTIVE_CONFIGURATION, FXLS89XXXX_ACTIVE_CONFIGURATION_SIZE);
+                FXLS89XXXX_stack_error(ERROR_BASE_FXLS8974CF);
+                // Turn sensors off.
+                POWER_disable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS);
+                // Enable interrupt on MCU side.
+                SENSORS_HW_enable_accelerometer_interrupt();
+                // Update state.
+                hmd_ctx.accelerometer_state = 1;
+            }
+#endif
+            // Go to sleep by default.
+            hmd_ctx.state = HMD_STATE_SLEEP;
+            // Check wake-up flags.
+#ifdef HMD_ENS16X_ENABLE
+            if (hmd_ctx.flags.air_quality_request != 0) {
+                hmd_ctx.state = HMD_STATE_AIR_QUALITY;
+            }
+#endif
+            if (hmd_ctx.flags.monitoring_request != 0) {
+                hmd_ctx.state = HMD_STATE_MONITORING;
+            }
+#ifdef HMD_BUTTON_ENABLE
+            if (hmd_ctx.flags.button_request != 0) {
+                hmd_ctx.state = HMD_STATE_BUTTON;
+            }
+#endif
+#ifdef HMD_FXLS89XXXX_ENABLE
+            if (GPIO_read(&GPIO_SENSOR_IRQ) != 0) {
+                hmd_ctx.state = HMD_STATE_ACCELEROMETER;
+            }
+#endif
+            if (hmd_ctx.state != HMD_STATE_SLEEP) {
+                // Calibrate clocks.
+                rcc_status = RCC_calibrate_internal_clocks(NVIC_PRIORITY_CLOCK_CALIBRATION);
+                RCC_stack_error(ERROR_BASE_RCC);
+            }
+            break;
+        case HMD_STATE_SLEEP:
+            // Enter stop mode.
+            IWDG_reload();
+            PWR_enter_deepsleep_mode(PWR_DEEPSLEEP_MODE_STOP);
+            IWDG_reload();
+            // Check wake-up reason.
+            hmd_ctx.state = HMD_STATE_TASK_CHECK;
             break;
         default:
             // Unknown state.
-            hmd_ctx.state = HMD_STATE_SLEEP;
+            hmd_ctx.state = HMD_STATE_TASK_CHECK;
             break;
         }
     }

@@ -66,15 +66,7 @@ ERROR_code_t SENSORS_HW_i2c_read(ERROR_code_t i2c_error_base, uint8_t i2c_addres
  *******************************************************************/
 ERROR_code_t SENSORS_HW_delay_milliseconds(ERROR_code_t delay_error_base, uint32_t delay_ms);
 
-/*!******************************************************************
- * \fn void SENSORS_HW_set_accelerometer_irq_callback(EXTI_gpio_irq_cb_t accelerometer_irq_callback)
- * \brief Set accelerometer interrupt callback implemented in main context.
- * \param[in]   accelerometer_irq_callback: Function to call on accelerometer interrupt.
- * \param[out]  none
- * \retval      none
- *******************************************************************/
-void SENSORS_HW_set_accelerometer_irq_callback(EXTI_gpio_irq_cb_t accelerometer_irq_callback);
-
+#ifdef HMD_FXLS89XXXX_ENABLE
 /*!******************************************************************
  * \fn void SENSORS_HW_enable_accelerometer_interrupt(void)
  * \brief Enable accelerometer interrupt.
@@ -83,7 +75,9 @@ void SENSORS_HW_set_accelerometer_irq_callback(EXTI_gpio_irq_cb_t accelerometer_
  * \retval      none
  *******************************************************************/
 void SENSORS_HW_enable_accelerometer_interrupt(void);
+#endif
 
+#ifdef HMD_FXLS89XXXX_ENABLE
 /*!******************************************************************
  * \fn void SENSORS_HW_disable_accelerometer_interrupt(void)
  * \brief Disable accelerometer interrupt.
@@ -92,5 +86,6 @@ void SENSORS_HW_enable_accelerometer_interrupt(void);
  * \retval      none
  *******************************************************************/
 void SENSORS_HW_disable_accelerometer_interrupt(void);
+#endif
 
 #endif /* __SENSORS_HW_H__ */
