@@ -40,6 +40,10 @@
 #define HMD_SIGFOX_STARTUP_DATA_SIZE                8
 #define HMD_SIGFOX_ERROR_STACK_DATA_SIZE            12
 #define HMD_SIGFOX_MONITORING_DATA_SIZE             6
+#ifdef HMD_BUTTON_ENABLE
+#define HMD_VBATT_INDICATOR_RANGE                   7
+#define HMD_VBATT_INDICATOR_DELAY_MS                2000
+#endif
 #ifdef HMD_ENS16X_ENABLE
 #define HMD_SIGFOX_AIR_QUALITY_DATA_SIZE            7
 #define HMD_ENS16X_ACQUISITION_DELAY_MS             10000
@@ -73,14 +77,14 @@
 typedef enum {
     HMD_STATE_STARTUP,
     HMD_STATE_MONITORING,
+#ifdef HMD_BUTTON_ENABLE
+    HMD_STATE_BUTTON,
+#endif
 #ifdef HMD_ENS16X_ENABLE
     HMD_STATE_AIR_QUALITY,
 #endif
 #ifdef HMD_FXLS89XXXX_ENABLE
     HMD_STATE_ACCELEROMETER,
-#endif
-#ifdef HMD_BUTTON_ENABLE
-    HMD_STATE_BUTTON,
 #endif
     HMD_STATE_ERROR_STACK,
     HMD_STATE_TASK_CHECK,
@@ -166,6 +170,12 @@ typedef union {
 
 /*******************************************************************/
 typedef struct {
+    int32_t threshold_mv;
+    LED_color_t led_color;
+} HMD_vbatt_indicator_t;
+
+/*******************************************************************/
+typedef struct {
     // State machine.
     HMD_state_t state;
     HMD_status_t status;
@@ -191,6 +201,18 @@ typedef struct {
 
 #ifndef HMD_MODE_CLI
 static HMD_context_t hmd_ctx;
+#endif
+
+#if (!(defined HMD_MODE_CLI) && (defined HMD_BUTTON_ENABLE))
+static const HMD_vbatt_indicator_t HMD_VBATT_INDICATOR[HMD_VBATT_INDICATOR_RANGE] = {
+    { 4100, LED_COLOR_GREEN },
+    { 4000, LED_COLOR_CYAN },
+    { 3900, LED_COLOR_WHITE },
+    { 3800, LED_COLOR_YELLOW },
+    { 3700, LED_COLOR_BLUE },
+    { 3600, LED_COLOR_MAGENTA },
+    { 0, LED_COLOR_RED }
+};
 #endif
 
 /*** MAIN local functions ***/
@@ -280,6 +302,8 @@ static void _HMD_init_hw(void) {
     // Init HMI.
 #if ((defined HMD_BUTTON_ENABLE) && !(defined HMD_MODE_CLI))
     button_status = BUTTON_init(&_HMD_button_irq_callback);
+    BUTTON_stack_error(ERROR_BASE_BUTTON);
+    button_status = BUTTON_enable_interrupt();
     BUTTON_stack_error(ERROR_BASE_BUTTON);
 #endif
     led_status = LED_init();
@@ -481,6 +505,10 @@ int main(void) {
     HMD_sigfox_monitoring_data_t sigfox_monitoring_data;
     SIGFOX_EP_API_application_message_t application_message;
     uint8_t sigfox_error_stack_data[HMD_SIGFOX_ERROR_STACK_DATA_SIZE];
+#ifdef HMD_BUTTON_ENABLE
+    LED_status_t led_status = LED_SUCCESS;
+    LPTIM_status_t lptim_status = LPTIM_SUCCESS;
+#endif
 #ifdef HMD_ENS16X_ENABLE
     HMD_sigfox_air_quality_data_t sigfox_air_quality_data;
 #endif
@@ -552,6 +580,31 @@ int main(void) {
             // Compute next state.
             hmd_ctx.state = HMD_STATE_ERROR_STACK;
             break;
+#ifdef HMD_BUTTON_ENABLE
+        case HMD_STATE_BUTTON:
+            IWDG_reload();
+            // Measure related data.
+            _HMD_update_battery_voltage();
+            // Compute LED color.
+            for (idx = 0; idx < HMD_VBATT_INDICATOR_RANGE; idx++) {
+                if (hmd_ctx.vbatt_mv >= HMD_VBATT_INDICATOR[idx].threshold_mv) {
+                    // Turn LED on.
+                    led_status = LED_set_color(HMD_VBATT_INDICATOR[idx].led_color);
+                    LED_stack_error(ERROR_BASE_LED);
+                    break;
+                }
+            }
+            lptim_status = LPTIM_delay_milliseconds(HMD_VBATT_INDICATOR_DELAY_MS, LPTIM_DELAY_MODE_STOP);
+            LPTIM_stack_error(ERROR_BASE_LPTIM);
+            // Turn LED off.
+            led_status = LED_set_color(LED_COLOR_OFF);
+            LED_stack_error(ERROR_BASE_LED);
+            // Clear flag.
+            hmd_ctx.flags.button_request = 0;
+            // Compute next state.
+            hmd_ctx.state = HMD_STATE_TASK_CHECK;
+            break;
+#endif
 #ifdef HMD_ENS16X_ENABLE
         case HMD_STATE_AIR_QUALITY:
             IWDG_reload();
@@ -603,16 +656,6 @@ int main(void) {
             application_message.ul_payload = (sfx_u8*) (sigfox_accelerometer_event_data.frame);
             application_message.ul_payload_size_bytes = HMD_SIGFOX_ACCELEROMETER_EVENT_DATA_SIZE;
             _HMD_send_sigfox_message(&application_message);
-            // Compute next state.
-            hmd_ctx.state = HMD_STATE_TASK_CHECK;
-            break;
-#endif
-#ifdef HMD_BUTTON_ENABLE
-        case HMD_STATE_BUTTON:
-            IWDG_reload();
-            // TODO
-            // Clear flag.
-            hmd_ctx.flags.button_request = 0;
             // Compute next state.
             hmd_ctx.state = HMD_STATE_TASK_CHECK;
             break;

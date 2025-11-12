@@ -29,7 +29,7 @@ typedef enum {
 
 /*!******************************************************************
  * \fn BUTTON_status_t BUTTON_init(void)
- * \brief Init BUTTON driver.
+ * \brief Init push button driver.
  * \param[in]   none
  * \param[out]  none
  * \retval      Function execution status.
@@ -38,12 +38,30 @@ BUTTON_status_t BUTTON_init(EXTI_gpio_irq_cb_t irq_callback);
 
 /*!******************************************************************
  * \fn BUTTON_status_t BUTTON_de_init(void)
- * \brief Release BUTTON driver.
+ * \brief Release push button driver.
  * \param[in]   none
  * \param[out]  none
  * \retval      Function execution status.
  *******************************************************************/
 BUTTON_status_t BUTTON_de_init(void);
+
+/*!******************************************************************
+ * \fn BUTTON_status_t BUTTON_enable_interrupt(void)
+ * \brief Enable push button interrupt.
+ * \param[in]   none
+ * \param[out]  none
+ * \retval      Function execution status.
+ *******************************************************************/
+BUTTON_status_t BUTTON_enable_interrupt(void);
+
+/*!******************************************************************
+ * \fn BUTTON_status_t BUTTON_disable_interrupt(void)
+ * \brief Disable push button interrupt.
+ * \param[in]   none
+ * \param[out]  none
+ * \retval      Function execution status.
+ *******************************************************************/
+BUTTON_status_t BUTTON_disable_interrupt(void);
 
 /*******************************************************************/
 #define BUTTON_exit_error(base) { ERROR_check_exit(button_status, BUTTON_SUCCESS, base) }
