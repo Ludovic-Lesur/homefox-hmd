@@ -18,24 +18,29 @@
 #define SIGFOX_EP_UL_PAYLOAD_SIZE_STARTUP           8
 #define SIGFOX_EP_UL_PAYLOAD_SIZE_ERROR_STACK       12
 #define SIGFOX_EP_UL_PAYLOAD_SIZE_MONITORING        6
-#ifdef HMD_ENS16X_ENABLE
+#ifdef HMD_AIR_QUALITY_ENABLE
 #define SIGFOX_EP_UL_PAYLOAD_SIZE_AIR_QUALITY       7
 #endif
-#ifdef HMD_FXLS89XXXX_ENABLE
+#ifdef HMD_ACCELEROMETER_ENABLE
 #define SIGFOX_EP_UL_PAYLOAD_SIZE_ACCELEROMETER     1
 #endif
 // Error values.
 #define SIGFOX_EP_ERROR_VALUE_ANALOG_16BITS         0xFFFF
 #define SIGFOX_EP_ERROR_VALUE_TEMPERATURE           0x7FF
 #define SIGFOX_EP_ERROR_VALUE_HUMIDITY              0xFF
+#ifdef HMD_AIR_QUALITY_ENABLE
 #define SIGFOX_EP_ERROR_VALUE_TVOC                  0xFFFF
 #define SIGFOX_EP_ERROR_VALUE_ECO2                  0xFFFF
 #define SIGFOX_EP_ERROR_VALUE_AQI_UBA               0b1111
 #define SIGFOX_EP_ERROR_VALUE_AQI_S                 0xFFF
+#endif
 
 /*** SIGFOX EP FRAMES structures ***/
 
-/*******************************************************************/
+/*!******************************************************************
+ * \struct SIGFOX_EP_ul_payload_startup_t
+ * \brief Sigfox uplink startup frame format.
+ *******************************************************************/
 typedef union {
     uint8_t frame[SIGFOX_EP_UL_PAYLOAD_SIZE_STARTUP];
     struct {
@@ -48,7 +53,10 @@ typedef union {
     } __attribute__((scalar_storage_order("big-endian"))) __attribute__((packed));
 } SIGFOX_EP_ul_payload_startup_t;
 
-/*******************************************************************/
+/*!******************************************************************
+ * \struct SIGFOX_EP_ul_payload_monitoring_t
+ * \brief Sigfox uplink monitoring frame format.
+ *******************************************************************/
 typedef union {
     uint8_t frame[SIGFOX_EP_UL_PAYLOAD_SIZE_MONITORING];
     struct {
@@ -60,8 +68,11 @@ typedef union {
     } __attribute__((scalar_storage_order("big-endian"))) __attribute__((packed));
 } SIGFOX_EP_ul_payload_monitoring_t;
 
-#ifdef HMD_ENS16X_ENABLE
-/*******************************************************************/
+#ifdef HMD_AIR_QUALITY_ENABLE
+/*!******************************************************************
+ * \struct SIGFOX_EP_ul_payload_air_quality_t
+ * \brief Sigfox uplink air quality frame format.
+ *******************************************************************/
 typedef union {
     uint8_t frame[SIGFOX_EP_UL_PAYLOAD_SIZE_AIR_QUALITY];
     struct {
@@ -75,8 +86,11 @@ typedef union {
 } SIGFOX_EP_ul_payload_air_quality_t;
 #endif
 
-#ifdef HMD_FXLS89XXXX_ENABLE
-/*******************************************************************/
+#ifdef HMD_ACCELEROMETER_ENABLE
+/*!******************************************************************
+ * \struct SIGFOX_EP_ul_payload_accelerometer_t
+ * \brief Sigfox uplink accelerometer frame format.
+ *******************************************************************/
 typedef union {
     uint8_t frame[SIGFOX_EP_UL_PAYLOAD_SIZE_ACCELEROMETER];
     struct {
@@ -84,5 +98,35 @@ typedef union {
     } __attribute__((scalar_storage_order("big-endian"))) __attribute__((packed));
 } SIGFOX_EP_ul_payload_accelerometer_t;
 #endif
+
+/*!******************************************************************
+ * \enum SIGFOX_EP_dl_op_code_t
+ * \brief Sigfox downlink operation codes.
+ *******************************************************************/
+typedef enum {
+    SIGFOX_EP_DL_OP_CODE_NOP = 0,
+    SIGFOX_EP_DL_OP_CODE_RESET,
+    SIGFOX_EP_DL_OP_CODE_SET_TIMINGS,
+    SIGFOX_EP_DL_OP_CODE_LAST
+} SIGFOX_EP_dl_op_code_t;
+
+/*!******************************************************************
+ * \enum SIGFOX_EP_dl_payload_t
+ * \brief Sigfox downlink frames format.
+ *******************************************************************/
+typedef union {
+    uint8_t frame[SIGFOX_DL_PAYLOAD_SIZE_BYTES];
+    struct {
+        unsigned op_code :8;
+        union {
+            struct {
+                unsigned monitoring_period_minutes :16;
+                unsigned air_quality_period_minutes :16;
+                unsigned accelerometer_blanking_time_seconds :16;
+                unsigned unused: 8;
+            } __attribute__((scalar_storage_order("big-endian"))) __attribute__((packed)) set_timings;
+        };
+    } __attribute__((scalar_storage_order("big-endian"))) __attribute__((packed));
+} SIGFOX_EP_dl_payload_t;
 
 #endif /* __SIGFOX_EP_FRAMES_H__ */

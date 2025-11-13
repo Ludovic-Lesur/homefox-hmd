@@ -46,6 +46,10 @@
  *******************************************************************/
 typedef enum {
     SUCCESS = 0,
+    ERROR_SIGFOX_EP_DL_OP_CODE,
+    ERROR_SIGFOX_EP_DL_MONITORING_PERIOD,
+    ERROR_SIGFOX_EP_DL_AIR_QUALITY_PERIOD,
+    ERROR_SIGFOX_EP_DL_ACCELEROMETER_BLANKING_TIME,
     // Peripherals.
     ERROR_BASE_AES = ERROR_BASE_STEP,
     ERROR_BASE_IWDG = (ERROR_BASE_AES + AES_ERROR_BASE_LAST),

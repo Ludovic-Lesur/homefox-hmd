@@ -14,7 +14,7 @@
 
 /*** ENS21X driver compilation flags ***/
 
-#ifndef HMD_ENS21X_ENABLE
+#ifndef HMD_TEMPERATURE_HUMIDITY_ENS21X_ENABLE
 #define ENS21X_DRIVER_DISABLE
 #endif
 

@@ -13,7 +13,7 @@
 
 /*** FXLS89XXXX driver compilation flags ***/
 
-#ifndef HMD_FXLS89XXXX_ENABLE
+#ifndef HMD_ACCELEROMETER_ENABLE
 #define FXLS89XXXX_DRIVER_DISABLE
 #endif
 

@@ -77,7 +77,7 @@ errors:
     return status;
 }
 
-#ifdef HMD_FXLS89XXXX_ENABLE
+#ifdef HMD_ACCELEROMETER_ENABLE
 /*******************************************************************/
 void SENSORS_HW_enable_accelerometer_interrupt(void) {
     // Configure accelerometer interrupt pin.
@@ -88,7 +88,7 @@ void SENSORS_HW_enable_accelerometer_interrupt(void) {
 }
 #endif
 
-#ifdef HMD_FXLS89XXXX_ENABLE
+#ifdef HMD_ACCELEROMETER_ENABLE
 /*******************************************************************/
 void SENSORS_HW_disable_accelerometer_interrupt(void) {
     // Disable interrupt.

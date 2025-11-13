@@ -107,9 +107,7 @@
  * \def SIGFOX_EP_BIDIRECTIONAL
  * \brief Support bidirectional procedure (downlink) if defined. Only applicable to application messages. Otherwise all messages will be uplink only.
  *******************************************************************/
-#ifdef HMD_MODE_CLI
 #define SIGFOX_EP_BIDIRECTIONAL
-#endif
 
 /*!******************************************************************
  * \def SIGFOX_EP_ASYNCHRONOUS

@@ -56,16 +56,16 @@ void POWER_init(void) {
 void POWER_enable(POWER_requester_id_t requester_id, POWER_domain_t domain, LPTIM_delay_mode_t delay_mode) {
     // Local variables.
     ANALOG_status_t analog_status = ANALOG_SUCCESS;
-#ifdef HMD_ENS21X_ENABLE
+#ifdef HMD_TEMPERATURE_HUMIDITY_ENS21X_ENABLE
     ENS21X_status_t ens21x_status = ENS21X_SUCCESS;
 #endif
-#ifdef HMD_SHT3X_ENABLE
+#ifdef HMD_TEMPERATURE_HUMIDITY_SHT3X_ENABLE
     SHT3X_status_t sht3x_status = SHT3X_SUCCESS;
 #endif
-#ifdef HMD_ENS16X_ENABLE
+#ifdef HMD_AIR_QUALITY_ENABLE
     ENS16X_status_t ens16x_status = ENS16X_SUCCESS;
 #endif
-#ifdef HMD_FXLS89XXXX_ENABLE
+#ifdef HMD_ACCELEROMETER_ENABLE
     FXLS89XXXX_status_t fxls89xxxx_status = FXLS89XXXX_SUCCESS;
 #endif
     SX126X_status_t sx126x_status = SX126X_SUCCESS;
@@ -103,19 +103,19 @@ void POWER_enable(POWER_requester_id_t requester_id, POWER_domain_t domain, LPTI
         GPIO_write(&GPIO_SENSORS_POWER_ENABLE, 1);
         delay_ms = POWER_ON_DELAY_MS_SENSORS;
         // Init attached drivers.
-#ifdef HMD_ENS21X_ENABLE
+#ifdef HMD_TEMPERATURE_HUMIDITY_ENS21X_ENABLE
         ens21x_status = ENS21X_init();
         _POWER_stack_driver_error(ens21x_status, ENS21X_SUCCESS, ERROR_BASE_ENS210, POWER_ERROR_DRIVER_ENS21X);
 #endif
-#ifdef HMD_SHT3X_ENABLE
+#ifdef HMD_TEMPERATURE_HUMIDITY_SHT3X_ENABLE
         sht3x_status = SHT3X_init();
         _POWER_stack_driver_error(sht3x_status, SHT3X_SUCCESS, ERROR_BASE_SHT30, POWER_ERROR_DRIVER_SHT3X);
 #endif
-#ifdef HMD_ENS16X_ENABLE
+#ifdef HMD_AIR_QUALITY_ENABLE
         ens16x_status = ENS16X_init();
         _POWER_stack_driver_error(ens16x_status, ENS16X_SUCCESS, ERROR_BASE_ENS16X, POWER_ERROR_DRIVER_ENS16X);
 #endif
-#ifdef HMD_FXLS89XXXX_ENABLE
+#ifdef HMD_ACCELEROMETER_ENABLE
         fxls89xxxx_status = FXLS89XXXX_init();
         _POWER_stack_driver_error(fxls89xxxx_status, FXLS89XXXX_SUCCESS, ERROR_BASE_FXLS8974CF, POWER_ERROR_DRIVER_FXLS89XXXX);
 #endif
@@ -158,16 +158,16 @@ errors:
 void POWER_disable(POWER_requester_id_t requester_id, POWER_domain_t domain) {
     // Local variables.
     ANALOG_status_t analog_status = ANALOG_SUCCESS;
-#ifdef HMD_ENS21X_ENABLE
+#ifdef HMD_TEMPERATURE_HUMIDITY_ENS21X_ENABLE
     ENS21X_status_t ens21x_status = ENS21X_SUCCESS;
 #endif
-#ifdef HMD_SHT3X_ENABLE
+#ifdef HMD_TEMPERATURE_HUMIDITY_SHT3X_ENABLE
     SHT3X_status_t sht3x_status = SHT3X_SUCCESS;
 #endif
-#ifdef HMD_ENS16X_ENABLE
+#ifdef HMD_AIR_QUALITY_ENABLE
     ENS16X_status_t ens16x_status = ENS16X_SUCCESS;
 #endif
-#ifdef HMD_FXLS89XXXX_ENABLE
+#ifdef HMD_ACCELEROMETER_ENABLE
     FXLS89XXXX_status_t fxls89xxxx_status = FXLS89XXXX_SUCCESS;
 #endif
     SX126X_status_t sx126x_status = SX126X_SUCCESS;
@@ -198,19 +198,19 @@ void POWER_disable(POWER_requester_id_t requester_id, POWER_domain_t domain) {
         break;
     case POWER_DOMAIN_SENSORS:
         // Release attached drivers.
-#ifdef HMD_ENS21X_ENABLE
+#ifdef HMD_TEMPERATURE_HUMIDITY_ENS21X_ENABLE
         ens21x_status = ENS21X_de_init();
         _POWER_stack_driver_error(ens21x_status, ENS21X_SUCCESS, ERROR_BASE_ENS210, POWER_ERROR_DRIVER_ENS21X);
 #endif
-#ifdef HMD_SHT3X_ENABLE
+#ifdef HMD_TEMPERATURE_HUMIDITY_SHT3X_ENABLE
         sht3x_status = SHT3X_de_init();
         _POWER_stack_driver_error(sht3x_status, SHT3X_SUCCESS, ERROR_BASE_SHT30, POWER_ERROR_DRIVER_SHT3X);
 #endif
-#ifdef HMD_ENS16X_ENABLE
+#ifdef HMD_AIR_QUALITY_ENABLE
         ens16x_status = ENS16X_de_init();
         _POWER_stack_driver_error(ens16x_status, ENS16X_SUCCESS, ERROR_BASE_ENS16X, POWER_ERROR_DRIVER_ENS16X);
 #endif
-#ifdef HMD_FXLS89XXXX_ENABLE
+#ifdef HMD_ACCELEROMETER_ENABLE
         fxls89xxxx_status = FXLS89XXXX_de_init();
         _POWER_stack_driver_error(fxls89xxxx_status, FXLS89XXXX_SUCCESS, ERROR_BASE_FXLS8974CF, POWER_ERROR_DRIVER_FXLS89XXXX);
 #endif

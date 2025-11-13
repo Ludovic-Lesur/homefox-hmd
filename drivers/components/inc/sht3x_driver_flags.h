@@ -14,7 +14,7 @@
 
 /*** SHT3X driver compilation flags ***/
 
-#ifndef HMD_SHT3X_ENABLE
+#ifndef HMD_TEMPERATURE_HUMIDITY_SHT3X_ENABLE
 #define SHT3X_DRIVER_DISABLE
 #endif
 

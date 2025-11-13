@@ -66,7 +66,7 @@ ERROR_code_t SENSORS_HW_i2c_read(ERROR_code_t i2c_error_base, uint8_t i2c_addres
  *******************************************************************/
 ERROR_code_t SENSORS_HW_delay_milliseconds(ERROR_code_t delay_error_base, uint32_t delay_ms);
 
-#ifdef HMD_FXLS89XXXX_ENABLE
+#ifdef HMD_ACCELEROMETER_ENABLE
 /*!******************************************************************
  * \fn void SENSORS_HW_enable_accelerometer_interrupt(void)
  * \brief Enable accelerometer interrupt.
@@ -77,7 +77,7 @@ ERROR_code_t SENSORS_HW_delay_milliseconds(ERROR_code_t delay_error_base, uint32
 void SENSORS_HW_enable_accelerometer_interrupt(void);
 #endif
 
-#ifdef HMD_FXLS89XXXX_ENABLE
+#ifdef HMD_ACCELEROMETER_ENABLE
 /*!******************************************************************
  * \fn void SENSORS_HW_disable_accelerometer_interrupt(void)
  * \brief Disable accelerometer interrupt.

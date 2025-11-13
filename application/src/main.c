@@ -14,6 +14,8 @@
 #include "mcu_mapping.h"
 #include "nvic.h"
 #include "nvic_priority.h"
+#include "nvm.h"
+#include "nvm_address.h"
 #include "pwr.h"
 #include "rcc.h"
 #include "rtc.h"
@@ -37,24 +39,37 @@
 
 /*** MAIN local macros ***/
 
-#ifdef HMD_BUTTON_ENABLE
-#define HMD_VBATT_INDICATOR_RANGE           7
-#define HMD_VBATT_INDICATOR_DELAY_MS        2000
-#endif
-#ifdef HMD_ENS16X_ENABLE
-#define HMD_ENS16X_ACQUISITION_DELAY_MS     10000
-#define HMD_ENS16X_ACQUISITION_TIMEOUT_MS   300000
-#ifdef ENS16X_DRIVER_DEVICE_ENS161
-#define HMD_ENS16X_ACQUISITION_MODE         ENS16X_SENSING_MODE_LOW_POWER
-#else
-#define HMD_ENS16X_ACQUISITION_MODE         ENS16X_SENSING_MODE_STANDARD
-#endif
-#endif
+// Monitoring period.
+#define HMD_MONITORING_PERIOD_MINUTES_DEFAULT               60
+#define HMD_MONITORING_PERIOD_MINUTES_MIN                   10
+#define HMD_MONITORING_PERIOD_MINUTES_MAX                   10080
+// Downlink period.
+#define HMD_DOWNLINK_PERIOD_SECONDS                         86400
 // Error stack message period.
-#define HMD_ERROR_STACK_PERIOD_SECONDS      86400
+#define HMD_ERROR_STACK_BLANKING_TIME_SECONDS               86400
 // Voltage hysteresis for radio.
-#define HMD_RADIO_ON_VSTR_THRESHOLD_MV      3700
-#define HMD_RADIO_OFF_VSTR_THRESHOLD_MV     3500
+#define HMD_RADIO_ON_VSTR_THRESHOLD_MV                      3700
+#define HMD_RADIO_OFF_VSTR_THRESHOLD_MV                     3500
+#ifdef HMD_BUTTON_ENABLE
+#define HMD_VBATT_INDICATOR_RANGE                           7
+#define HMD_VBATT_INDICATOR_DELAY_MS                        2000
+#endif
+#ifdef HMD_AIR_QUALITY_ENABLE
+#define HMD_AIR_QUALITY_PERIOD_MINUTES_DEFAULT              60
+#define HMD_AIR_QUALITY_PERIOD_MINUTES_MIN                  10
+#define HMD_AIR_QUALITY_PERIOD_MINUTES_MAX                  10080
+#define HMD_AIR_QUALITY_ACQUISITION_DELAY_MS                10000
+#define HMD_AIR_QUALITY_ACQUISITION_TIMEOUT_MS              300000
+#ifdef ENS16X_DRIVER_DEVICE_ENS161
+#define HMD_AIR_QUALITY_ACQUISITION_MODE                    ENS16X_SENSING_MODE_LOW_POWER
+#else
+#define HMD_AIR_QUALITY_ACQUISITION_MODE                    ENS16X_SENSING_MODE_STANDARD
+#endif
+#endif
+#ifdef HMD_ACCELEROMETER_ENABLE
+#define HMD_ACCELEROMETER_BLANKING_TIME_SECONDS_DEFAULT     60
+#define HMD_ACCELEROMETER_BLANKING_TIME_SECONDS_MAX         17280
+#endif
 
 /*** MAIN local structures ***/
 
@@ -75,13 +90,14 @@ typedef enum {
 typedef union {
     uint8_t all;
     struct {
-        unsigned unused :2;
+        unsigned unused :1;
+        unsigned daily_downlink :1;
         unsigned lse_status :1;
         unsigned lsi_status :1;
-        unsigned fxls89xxxx_enable :1;
-        unsigned ens16x_enable :1;
-        unsigned ens21x_enable :1;
-        unsigned sht3x_enable :1;
+        unsigned accelerometer_enable :1;
+        unsigned air_quality_enable :1;
+        unsigned temperature_humidity_ens21x_enable :1;
+        unsigned temperature_humidity_sht3x_enable :1;
     } __attribute__((scalar_storage_order("big-endian"))) __attribute__((packed));
 } HMD_status_t;
 
@@ -89,21 +105,28 @@ typedef union {
 typedef union {
     uint8_t all;
     struct {
+        unsigned reset_request :1;
         unsigned radio_enabled : 1;
+        unsigned downlink_request :1;
         unsigned air_quality_request :1;
         unsigned button_request :1;
-        unsigned error_stack_request :1;
+        unsigned error_stack_enable :1;
         unsigned monitoring_request :1;
     } __attribute__((scalar_storage_order("big-endian"))) __attribute__((packed));
 } HMD_flags_t;
 
-#if (!(defined HMD_MODE_CLI) && (defined HMD_BUTTON_ENABLE))
+/*******************************************************************/
+typedef struct {
+    uint32_t monitoring_period_minutes;
+    uint32_t air_quality_period_minutes;
+    uint32_t accelerometer_blanking_time_seconds;
+} HMD_timings_t;
+
 /*******************************************************************/
 typedef struct {
     int32_t threshold_mv;
     LED_color_t led_color;
 } HMD_vbatt_indicator_t;
-#endif
 
 /*******************************************************************/
 typedef struct {
@@ -111,20 +134,26 @@ typedef struct {
     HMD_state_t state;
     HMD_status_t status;
     volatile HMD_flags_t flags;
+    // Monitoring.
+    uint32_t monitoring_last_time_seconds;
+    // Downlink.
+    uint32_t downlink_last_time_seconds;
+    HMD_timings_t timings;
+    // Error stack.
+    uint32_t error_stack_last_time_seconds;
+    // Data.
     uint16_t vbatt_mv;
     uint16_t tamb_tenth_degrees;
     uint8_t hamb_percent;
-    uint32_t monitoring_next_time_seconds;
-    uint32_t error_stack_next_time_seconds;
-#ifdef HMD_ENS16X_ENABLE
-    uint32_t air_quality_next_time_seconds;
+#ifdef HMD_AIR_QUALITY_ENABLE
+    uint32_t air_quality_last_time_seconds;
     uint32_t air_quality_acquisition_time_ms;
     ENS16X_device_status_t air_quality_acquisition_status;
     ENS16X_air_quality_data_t air_quality_data;
 #endif
-#ifdef HMD_FXLS89XXXX_ENABLE
+#ifdef HMD_ACCELEROMETER_ENABLE
     uint8_t accelerometer_state;
-    uint32_t accelerometer_last_event_time_seconds;
+    uint32_t accelerometer_last_time_seconds;
 #endif
 } HMD_context_t;
 
@@ -157,33 +186,146 @@ static void _HMD_button_irq_callback(void) {
 
 #ifndef HMD_MODE_CLI
 /*******************************************************************/
+static void _HMD_load_timings(void) {
+    // Local variables.
+    NVM_status_t nvm_status = NVM_SUCCESS;
+    uint8_t nvm_byte = 0;
+    uint16_t generic_u16 = 0;
+    // Read monitoring period.
+    nvm_status = NVM_read_byte((NVM_ADDRESS_MONITORING_PERIOD_MINUTES + 0), &nvm_byte);
+    NVM_stack_error(ERROR_BASE_NVM);
+    generic_u16 = (nvm_byte << 8);
+    nvm_status = NVM_read_byte((NVM_ADDRESS_MONITORING_PERIOD_MINUTES + 1), &nvm_byte);
+    NVM_stack_error(ERROR_BASE_NVM);
+    generic_u16 |= nvm_byte;
+    // Check value.
+    if ((generic_u16 < HMD_MONITORING_PERIOD_MINUTES_MIN) || (generic_u16 > HMD_MONITORING_PERIOD_MINUTES_MAX)) {
+        // Reset to default value.
+        generic_u16 = HMD_MONITORING_PERIOD_MINUTES_DEFAULT;
+    }
+    hmd_ctx.timings.monitoring_period_minutes = generic_u16;
+#ifdef HMD_AIR_QUALITY_ENABLE
+    // Read air quality period.
+    nvm_status = NVM_read_byte((NVM_ADDRESS_AIR_QUALITY_PERIOD_MINUTES + 0), &nvm_byte);
+    NVM_stack_error(ERROR_BASE_NVM);
+    generic_u16 = (nvm_byte << 8);
+    nvm_status = NVM_read_byte((NVM_ADDRESS_AIR_QUALITY_PERIOD_MINUTES + 1), &nvm_byte);
+    NVM_stack_error(ERROR_BASE_NVM);
+    generic_u16 |= nvm_byte;
+    // Check value.
+    if ((generic_u16 < HMD_AIR_QUALITY_PERIOD_MINUTES_MIN) || (generic_u16 > HMD_AIR_QUALITY_PERIOD_MINUTES_MAX)) {
+        // Reset to default value.
+        generic_u16 = HMD_AIR_QUALITY_PERIOD_MINUTES_DEFAULT;
+    }
+    hmd_ctx.timings.air_quality_period_minutes = generic_u16;
+#endif
+#ifdef HMD_ACCELEROMETER_ENABLE
+    // Read accelerometer blanking time.
+    nvm_status = NVM_read_byte((NVM_ADDRESS_ACCELEROMETER_BLANKING_TIME_SECONDS + 0), &nvm_byte);
+    NVM_stack_error(ERROR_BASE_NVM);
+    generic_u16 = (nvm_byte << 8);
+    nvm_status = NVM_read_byte((NVM_ADDRESS_ACCELEROMETER_BLANKING_TIME_SECONDS + 1), &nvm_byte);
+    NVM_stack_error(ERROR_BASE_NVM);
+    generic_u16 |= nvm_byte;
+    // Check value.
+    if (generic_u16 > HMD_ACCELEROMETER_BLANKING_TIME_SECONDS_MAX) {
+       // Reset to default value.
+       generic_u16 = HMD_ACCELEROMETER_BLANKING_TIME_SECONDS_DEFAULT;
+    }
+    hmd_ctx.timings.accelerometer_blanking_time_seconds = generic_u16;
+#endif
+}
+#endif
+
+#ifndef HMD_MODE_CLI
+/*******************************************************************/
+static void _HMD_store_timings(HMD_timings_t* timings) {
+    // Local variables.
+    NVM_status_t nvm_status = NVM_SUCCESS;
+    uint16_t generic_u16 = 0;
+    // Monitoring period.
+    generic_u16 = (timings->monitoring_period_minutes);
+    if ((generic_u16 >= HMD_MONITORING_PERIOD_MINUTES_MIN) || (generic_u16 <= HMD_MONITORING_PERIOD_MINUTES_MAX)) {
+        // Update context.
+        hmd_ctx.timings.monitoring_period_minutes = generic_u16;
+        // Write new value in NVM.
+        nvm_status = NVM_write_byte((NVM_ADDRESS_MONITORING_PERIOD_MINUTES + 0), (uint8_t) (generic_u16 >> 8));
+        NVM_stack_error(ERROR_BASE_NVM);
+        nvm_status = NVM_write_byte((NVM_ADDRESS_MONITORING_PERIOD_MINUTES + 1), (uint8_t) (generic_u16 >> 0));
+        NVM_stack_error(ERROR_BASE_NVM);
+    }
+    else {
+        ERROR_stack_add(ERROR_SIGFOX_EP_DL_MONITORING_PERIOD);
+    }
+#ifdef HMD_AIR_QUALITY_ENABLE
+    // Air quality period.
+    generic_u16 = (timings->air_quality_period_minutes);
+    if ((generic_u16 >= HMD_AIR_QUALITY_PERIOD_MINUTES_MIN) || (generic_u16 <= HMD_AIR_QUALITY_PERIOD_MINUTES_MAX)) {
+        // Update context.
+        hmd_ctx.timings.air_quality_period_minutes = generic_u16;
+        // Write new value in NVM.
+        nvm_status = NVM_write_byte((NVM_ADDRESS_AIR_QUALITY_PERIOD_MINUTES + 0), (uint8_t) (generic_u16 >> 8));
+        NVM_stack_error(ERROR_BASE_NVM);
+        nvm_status = NVM_write_byte((NVM_ADDRESS_AIR_QUALITY_PERIOD_MINUTES + 1), (uint8_t) (generic_u16 >> 0));
+        NVM_stack_error(ERROR_BASE_NVM);
+    }
+    else {
+        ERROR_stack_add(ERROR_SIGFOX_EP_DL_AIR_QUALITY_PERIOD);
+    }
+#endif
+#ifdef HMD_ACCELEROMETER_ENABLE
+    // Accelerometer blanking time.
+    generic_u16 = (timings->accelerometer_blanking_time_seconds);
+    if (generic_u16 <= HMD_ACCELEROMETER_BLANKING_TIME_SECONDS_MAX) {
+        // Update context.
+        hmd_ctx.timings.accelerometer_blanking_time_seconds = generic_u16;
+        // Write new value in NVM.
+        nvm_status = NVM_write_byte((NVM_ADDRESS_ACCELEROMETER_BLANKING_TIME_SECONDS + 0), (uint8_t) (generic_u16 >> 8));
+        NVM_stack_error(ERROR_BASE_NVM);
+        nvm_status = NVM_write_byte((NVM_ADDRESS_ACCELEROMETER_BLANKING_TIME_SECONDS + 1), (uint8_t) (generic_u16 >> 0));
+        NVM_stack_error(ERROR_BASE_NVM);
+    }
+    else {
+        ERROR_stack_add(ERROR_SIGFOX_EP_DL_ACCELEROMETER_BLANKING_TIME);
+    }
+#endif
+}
+#endif
+
+#ifndef HMD_MODE_CLI
+/*******************************************************************/
 static void _HMD_init_context(void) {
     // Init context.
     hmd_ctx.state = HMD_STATE_STARTUP;
     hmd_ctx.status.all = 0;
     hmd_ctx.flags.all = 0;
     hmd_ctx.flags.radio_enabled = 1;
-    hmd_ctx.flags.error_stack_request = 1;
+    hmd_ctx.flags.downlink_request = 1;
+    hmd_ctx.flags.error_stack_enable = 1;
+    hmd_ctx.monitoring_last_time_seconds = 0;
+    hmd_ctx.downlink_last_time_seconds = 0;
+    hmd_ctx.error_stack_last_time_seconds = 0;
     hmd_ctx.vbatt_mv = SIGFOX_EP_ERROR_VALUE_ANALOG_16BITS;
     hmd_ctx.tamb_tenth_degrees = SIGFOX_EP_ERROR_VALUE_TEMPERATURE;
     hmd_ctx.hamb_percent = SIGFOX_EP_ERROR_VALUE_HUMIDITY;
-    hmd_ctx.monitoring_next_time_seconds = HMD_MONITORING_PERIOD_SECONDS;
-    hmd_ctx.error_stack_next_time_seconds = HMD_ERROR_STACK_PERIOD_SECONDS;
-#ifdef HMD_SHT3X_ENABLE
-    hmd_ctx.status.sht3x_enable = 1;
+#ifdef HMD_TEMPERATURE_HUMIDITY_SHT3X_ENABLE
+    hmd_ctx.status.temperature_humidity_sht3x_enable = 1;
 #endif
-#ifdef HMD_ENS21X_ENABLE
-    hmd_ctx.status.ens21x_enable = 1;
+#ifdef HMD_TEMPERATURE_HUMIDITY_ENS21X_ENABLE
+    hmd_ctx.status.temperature_humidity_ens21x_enable = 1;
 #endif
-#ifdef HMD_ENS16X_ENABLE
-    hmd_ctx.status.ens16x_enable = 1;
-    hmd_ctx.air_quality_next_time_seconds = HMD_AIR_QUALITY_PERIOD_SECONDS;
+#ifdef HMD_AIR_QUALITY_ENABLE
+    hmd_ctx.status.air_quality_enable = 1;
+    hmd_ctx.air_quality_last_time_seconds = 0;
 #endif
-#ifdef HMD_FXLS89XXXX_ENABLE
-    hmd_ctx.status.fxls89xxxx_enable = 1;
+#ifdef HMD_ACCELEROMETER_ENABLE
+    hmd_ctx.status.accelerometer_enable = 1;
     hmd_ctx.accelerometer_state = 0;
-    hmd_ctx.accelerometer_last_event_time_seconds = 0;
+    hmd_ctx.accelerometer_last_time_seconds = 0;
 #endif
+    // Load configuration from NVM.
+    _HMD_load_timings();
+    _HMD_store_timings(&hmd_ctx.timings);
 }
 #endif
 
@@ -272,22 +414,26 @@ static void _HMD_update_battery_voltage(void) {
 /*******************************************************************/
 static void _HMD_update_temperature_humidity(void) {
     // Local variables.
+#if ((defined HMD_TEMPERATURE_HUMIDITY_SHT3X_ENABLE) || (defined HMD_TEMPERATURE_HUMIDITY_ENS21X_ENABLE))
     MATH_status_t math_status = MATH_SUCCESS;
-#ifdef HMD_SHT3X_ENABLE
-    SHT3X_status_t sht3x_status = SHT3X_SUCCESS;
-#endif
-#ifdef HMD_ENS21X_ENABLE
-    ENS21X_status_t ens21x_status = ENS21X_SUCCESS;
-#endif
     int32_t temperature = 0;
     uint32_t temperature_signed_magnitude;
     int32_t humidity = 0;
+#endif
+#ifdef HMD_TEMPERATURE_HUMIDITY_SHT3X_ENABLE
+    SHT3X_status_t sht3x_status = SHT3X_SUCCESS;
+#endif
+#ifdef HMD_TEMPERATURE_HUMIDITY_ENS21X_ENABLE
+    ENS21X_status_t ens21x_status = ENS21X_SUCCESS;
+#endif
     // Reset data.
     hmd_ctx.tamb_tenth_degrees = SIGFOX_EP_ERROR_VALUE_TEMPERATURE;
     hmd_ctx.hamb_percent = SIGFOX_EP_ERROR_VALUE_HUMIDITY;
+#if ((defined HMD_TEMPERATURE_HUMIDITY_SHT3X_ENABLE) || (defined HMD_TEMPERATURE_HUMIDITY_ENS21X_ENABLE))
     // Turn sensors on.
     POWER_enable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_STOP);
-#ifdef HMD_ENS21X_ENABLE
+#endif
+#ifdef HMD_TEMPERATURE_HUMIDITY_ENS21X_ENABLE
     // Get temperature and humidity from ENS210.
     ens21x_status = ENS21X_get_temperature_humidity(I2C_ADDRESS_ENS210, &temperature, &humidity);
     ENS21X_stack_error(ERROR_BASE_ENS210);
@@ -302,7 +448,7 @@ static void _HMD_update_temperature_humidity(void) {
        hmd_ctx.hamb_percent = (uint8_t) humidity;
     }
 #endif
-#ifdef HMD_SHT3X_ENABLE
+#ifdef HMD_TEMPERATURE_HUMIDITY_SHT3X_ENABLE
     if ((hmd_ctx.tamb_tenth_degrees == SIGFOX_EP_ERROR_VALUE_TEMPERATURE) || (hmd_ctx.hamb_percent == SIGFOX_EP_ERROR_VALUE_HUMIDITY)) {
         // Get temperature and humidity from SHT30.
         sht3x_status = SHT3X_get_temperature_humidity(I2C_ADDRESS_SHT30, &temperature, &humidity);
@@ -319,12 +465,14 @@ static void _HMD_update_temperature_humidity(void) {
         }
     }
 #endif
+#if ((defined HMD_TEMPERATURE_HUMIDITY_SHT3X_ENABLE) || (defined HMD_TEMPERATURE_HUMIDITY_ENS21X_ENABLE))
     // Turn sensors off.
     POWER_disable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS);
+#endif
 }
 #endif
 
-#if (!(defined HMD_MODE_CLI) & (defined HMD_ENS16X_ENABLE))
+#if (!(defined HMD_MODE_CLI) & (defined HMD_AIR_QUALITY_ENABLE))
 /*******************************************************************/
 static void _HMD_update_air_quality(void) {
     // Local variables.
@@ -345,7 +493,7 @@ static void _HMD_update_air_quality(void) {
     // Turn sensors on.
     POWER_enable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_STOP);
     // Start acquisition.
-    ens16x_status = ENS16X_start_acquisition(I2C_ADDRESS_ENS16X, HMD_ENS16X_ACQUISITION_MODE, hmd_ctx.tamb_tenth_degrees, hmd_ctx.hamb_percent);
+    ens16x_status = ENS16X_start_acquisition(I2C_ADDRESS_ENS16X, HMD_AIR_QUALITY_ACQUISITION_MODE, hmd_ctx.tamb_tenth_degrees, hmd_ctx.hamb_percent);
     ENS16X_stack_error(ERROR_BASE_ENS16X);
     // Directly exit in case of error.
     if (ens16x_status == ENS16X_SUCCESS) {
@@ -354,10 +502,10 @@ static void _HMD_update_air_quality(void) {
             // Reload watchdog.
             IWDG_reload();
             // Low power delay.
-            lptim_status = LPTIM_delay_milliseconds(HMD_ENS16X_ACQUISITION_DELAY_MS, LPTIM_DELAY_MODE_STOP);
+            lptim_status = LPTIM_delay_milliseconds(HMD_AIR_QUALITY_ACQUISITION_DELAY_MS, LPTIM_DELAY_MODE_STOP);
             LPTIM_stack_error(ERROR_BASE_LPTIM);
             // Update duration.
-            hmd_ctx.air_quality_acquisition_time_ms += HMD_ENS16X_ACQUISITION_DELAY_MS;
+            hmd_ctx.air_quality_acquisition_time_ms += HMD_AIR_QUALITY_ACQUISITION_DELAY_MS;
             // Read device status.
             ens16x_status = ENS16X_get_device_status(I2C_ADDRESS_ENS16X, &hmd_ctx.air_quality_acquisition_status);
             ENS16X_stack_error(ERROR_BASE_ENS16X);
@@ -380,7 +528,7 @@ static void _HMD_update_air_quality(void) {
                 break;
             }
         }
-        while (hmd_ctx.air_quality_acquisition_time_ms < HMD_ENS16X_ACQUISITION_TIMEOUT_MS);
+        while (hmd_ctx.air_quality_acquisition_time_ms < HMD_AIR_QUALITY_ACQUISITION_TIMEOUT_MS);
         // Stop acquisition.
         ens16x_status = ENS16X_stop_acquisition(I2C_ADDRESS_ENS16X);
         ENS16X_stack_error(ERROR_BASE_ENS16X);
@@ -398,9 +546,15 @@ static void _HMD_send_sigfox_message(SIGFOX_EP_API_application_message_t* sigfox
     // Local variables.
     SIGFOX_EP_API_status_t sigfox_ep_api_status = SIGFOX_EP_API_SUCCESS;
     SIGFOX_EP_API_config_t lib_config;
+    SIGFOX_EP_API_message_status_t message_status;
+    SIGFOX_EP_dl_payload_t dl_payload;
+    HMD_timings_t timings;
+    int16_t dl_rssi = 0;
     uint8_t status = 0;
     // Directly exit of the radio is disabled due to low battery voltage.
     if (hmd_ctx.flags.radio_enabled == 0) goto errors;
+    // Check downlink request.
+    (sigfox_ep_application_message->bidirectional_flag) = ((hmd_ctx.flags.downlink_request != 0) ? SIGFOX_TRUE : SIGFOX_FALSE);
     // Library configuration.
     lib_config.rc = &SIGFOX_RC1;
     // Open library.
@@ -409,6 +563,45 @@ static void _HMD_send_sigfox_message(SIGFOX_EP_API_application_message_t* sigfox
     // Send message.
     sigfox_ep_api_status = SIGFOX_EP_API_send_application_message(sigfox_ep_application_message);
     SIGFOX_EP_API_check_status(0);
+    // Check bidirectional flag.
+    if (hmd_ctx.flags.downlink_request != 0) {
+        // Clear request and reset status.
+        hmd_ctx.flags.downlink_request = 0;
+        hmd_ctx.status.daily_downlink = 0;
+        // Read message status.
+        message_status = SIGFOX_EP_API_get_message_status();
+        // Check if downlink data is available.
+        if (message_status.field.dl_frame != 0) {
+            // Update status.
+            hmd_ctx.status.daily_downlink = 1;
+            // Read downlink payload.
+            sigfox_ep_api_status = SIGFOX_EP_API_get_dl_payload(dl_payload.frame, SIGFOX_DL_PAYLOAD_SIZE_BYTES, &dl_rssi);
+            SIGFOX_EP_API_check_status(0);
+            if (sigfox_ep_api_status == SIGFOX_EP_API_SUCCESS) {
+                // Parse payload.
+                switch (dl_payload.frame[0]) {
+                case SIGFOX_EP_DL_OP_CODE_NOP:
+                    // Nothing to do.
+                    break;
+                case SIGFOX_EP_DL_OP_CODE_RESET:
+                    // Set reset request.
+                    hmd_ctx.flags.reset_request = 1;
+                    break;
+                case SIGFOX_EP_DL_OP_CODE_SET_TIMINGS:
+                    // Build timing structure.
+                    timings.monitoring_period_minutes = dl_payload.set_timings.monitoring_period_minutes;
+                    timings.air_quality_period_minutes = dl_payload.set_timings.air_quality_period_minutes;
+                    timings.accelerometer_blanking_time_seconds = dl_payload.set_timings.accelerometer_blanking_time_seconds;
+                    // Check and store new configuration.
+                    _HMD_store_timings(&timings);
+                    break;
+                default:
+                    ERROR_stack_add(ERROR_SIGFOX_EP_DL_OP_CODE);
+                    break;
+                }
+            }
+        }
+    }
     // Close library.
     sigfox_ep_api_status = SIGFOX_EP_API_close();
     SIGFOX_EP_API_check_status(0);
@@ -440,25 +633,22 @@ int main(void) {
     LED_status_t led_status = LED_SUCCESS;
     LPTIM_status_t lptim_status = LPTIM_SUCCESS;
 #endif
-#ifdef HMD_ENS16X_ENABLE
+#ifdef HMD_AIR_QUALITY_ENABLE
     SIGFOX_EP_ul_payload_air_quality_t sigfox_ep_ul_payload_air_quality;
 #endif
-#ifdef HMD_FXLS89XXXX_ENABLE
+#ifdef HMD_ACCELEROMETER_ENABLE
     FXLS89XXXX_status_t fxls89xxxx_status = FXLS89XXXX_SUCCESS;
     FXLS89XXXX_int_src1_t fxls89xxxx_int_src1;
     FXLS89XXXX_int_src2_t fxls89xxxx_int_src2;
     SIGFOX_EP_ul_payload_accelerometer_t sigfox_ul_payload_accelerometer;
 #endif
-    uint8_t idx = 0;
-    uint8_t generic_u8;
+    uint8_t generic_u8 = 0;
     uint32_t generic_u32 = 0;
     // Application message default parameters.
     sigfox_ep_application_message.common_parameters.number_of_frames = 3;
     sigfox_ep_application_message.common_parameters.ul_bit_rate = SIGFOX_UL_BIT_RATE_100BPS;
     sigfox_ep_application_message.type = SIGFOX_APPLICATION_MESSAGE_TYPE_BYTE_ARRAY;
-#ifdef SIGFOX_EP_BIDIRECTIONAL
-    sigfox_ep_application_message.bidirectional_flag = 0;
-#endif
+    sigfox_ep_application_message.bidirectional_flag = SIGFOX_FALSE;
     sigfox_ep_application_message.ul_payload = SIGFOX_NULL;
     sigfox_ep_application_message.ul_payload_size_bytes = 0;
     // Main loop.
@@ -517,10 +707,10 @@ int main(void) {
             // Measure related data.
             _HMD_update_battery_voltage();
             // Compute LED color.
-            for (idx = 0; idx < HMD_VBATT_INDICATOR_RANGE; idx++) {
-                if (hmd_ctx.vbatt_mv >= HMD_VBATT_INDICATOR[idx].threshold_mv) {
+            for (generic_u8 = 0; generic_u8 < HMD_VBATT_INDICATOR_RANGE; generic_u8++) {
+                if (hmd_ctx.vbatt_mv >= HMD_VBATT_INDICATOR[generic_u8].threshold_mv) {
                     // Turn LED on.
-                    led_status = LED_set_color(HMD_VBATT_INDICATOR[idx].led_color);
+                    led_status = LED_set_color(HMD_VBATT_INDICATOR[generic_u8].led_color);
                     LED_stack_error(ERROR_BASE_LED);
                     break;
                 }
@@ -536,7 +726,7 @@ int main(void) {
             hmd_ctx.state = HMD_STATE_TASK_CHECK;
             break;
 #endif
-#ifdef HMD_ENS16X_ENABLE
+#ifdef HMD_AIR_QUALITY_ENABLE
         case HMD_STATE_AIR_QUALITY:
             IWDG_reload();
             // Measure related data.
@@ -563,12 +753,12 @@ int main(void) {
             hmd_ctx.state = HMD_STATE_ERROR_STACK;
             break;
 #endif
-#ifdef HMD_FXLS89XXXX_ENABLE
+#ifdef HMD_ACCELEROMETER_ENABLE
         case HMD_STATE_ACCELEROMETER:
             IWDG_reload();
             // Update accelerometer state and last event time.
             hmd_ctx.accelerometer_state = 0;
-            hmd_ctx.accelerometer_last_event_time_seconds = RTC_get_uptime_seconds();
+            hmd_ctx.accelerometer_last_time_seconds = RTC_get_uptime_seconds();
             // Disable interrupt on MCU side.
             SENSORS_HW_disable_accelerometer_interrupt();
             // Turn sensors on.
@@ -594,24 +784,25 @@ int main(void) {
         case HMD_STATE_ERROR_STACK:
             IWDG_reload();
             // Check period.
-            if (hmd_ctx.flags.error_stack_request != 0) {
-                // Clear flag.
-                hmd_ctx.flags.error_stack_request = 0;
+            if (hmd_ctx.flags.error_stack_enable != 0) {
                 // Import Sigfox library error stack.
                 ERROR_import_sigfox_stack();
                 // Check stack.
                 if (ERROR_stack_is_empty() == 0) {
                     // Read error stack.
-                    for (idx = 0; idx < (SIGFOX_EP_UL_PAYLOAD_SIZE_ERROR_STACK >> 1); idx++) {
+                    for (generic_u8 = 0; generic_u8 < (SIGFOX_EP_UL_PAYLOAD_SIZE_ERROR_STACK >> 1); generic_u8++) {
                         error_code = ERROR_stack_read();
-                        sigfox_ep_ul_payload_error_stack[(idx << 1) + 0] = (uint8_t) ((error_code >> 8) & 0x00FF);
-                        sigfox_ep_ul_payload_error_stack[(idx << 1) + 1] = (uint8_t) ((error_code >> 0) & 0x00FF);
+                        sigfox_ep_ul_payload_error_stack[(generic_u8 << 1) + 0] = (uint8_t) ((error_code >> 8) & 0x00FF);
+                        sigfox_ep_ul_payload_error_stack[(generic_u8 << 1) + 1] = (uint8_t) ((error_code >> 0) & 0x00FF);
                     }
                     // Send error stack frame.
                     sigfox_ep_application_message.common_parameters.ul_bit_rate = SIGFOX_UL_BIT_RATE_100BPS;
                     sigfox_ep_application_message.ul_payload = (sfx_u8*) (sigfox_ep_ul_payload_error_stack);
                     sigfox_ep_application_message.ul_payload_size_bytes = SIGFOX_EP_UL_PAYLOAD_SIZE_ERROR_STACK;
                     _HMD_send_sigfox_message(&sigfox_ep_application_message);
+                    // Disable error stack sending.
+                    hmd_ctx.flags.error_stack_enable = 0;
+                    hmd_ctx.error_stack_last_time_seconds = RTC_get_uptime_seconds();
                 }
             }
             // Compute next state.
@@ -622,31 +813,34 @@ int main(void) {
             // Read uptime.
             generic_u32 = RTC_get_uptime_seconds();
             // Periodic monitoring.
-            if (generic_u32 >= hmd_ctx.monitoring_next_time_seconds) {
-               // Set periodic request and compute next time.
+            if (generic_u32 >= (hmd_ctx.monitoring_last_time_seconds + (hmd_ctx.timings.monitoring_period_minutes * 60))) {
+               // Set request and compute next time.
                hmd_ctx.flags.monitoring_request = 1;
-               hmd_ctx.monitoring_next_time_seconds = (generic_u32 + HMD_MONITORING_PERIOD_SECONDS);
+               hmd_ctx.monitoring_last_time_seconds = generic_u32;
             }
-            if (generic_u32 >= hmd_ctx.error_stack_next_time_seconds) {
-               // Set periodic request and compute next time.
-               hmd_ctx.flags.error_stack_request = 1;
-               hmd_ctx.error_stack_next_time_seconds = (generic_u32 + HMD_ERROR_STACK_PERIOD_SECONDS);
+            // Periodic downlink.
+            if (generic_u32 >= (hmd_ctx.downlink_last_time_seconds + HMD_DOWNLINK_PERIOD_SECONDS)) {
+               // Set request and compute next time.
+               hmd_ctx.flags.downlink_request = 1;
+               hmd_ctx.downlink_last_time_seconds = generic_u32;
             }
-#ifdef HMD_ENS16X_ENABLE
-            if (generic_u32 >= hmd_ctx.air_quality_next_time_seconds) {
-               // Set periodic request and compute next time.
+            // Error stack.
+            if (generic_u32 >= (hmd_ctx.error_stack_last_time_seconds + HMD_ERROR_STACK_BLANKING_TIME_SECONDS)) {
+               // Enable error stack message.
+               hmd_ctx.flags.error_stack_enable = 1;
+            }
+#ifdef HMD_AIR_QUALITY_ENABLE
+            if (generic_u32 >= (hmd_ctx.air_quality_last_time_seconds + (hmd_ctx.timings.air_quality_period_minutes * 60))) {
+               // Set request and compute next time.
                hmd_ctx.flags.air_quality_request = 1;
-               hmd_ctx.air_quality_next_time_seconds = (generic_u32 + HMD_AIR_QUALITY_PERIOD_SECONDS);
+               hmd_ctx.air_quality_last_time_seconds = generic_u32;
             }
 #endif
-#ifdef HMD_FXLS89XXXX_ENABLE
+#ifdef HMD_ACCELEROMETER_ENABLE
             // Check accelerometer blanking time.
-            if ((generic_u32 >= (hmd_ctx.accelerometer_last_event_time_seconds + HMD_FXLS89XXXX_BLANKING_TIME_SECONDS)) && (hmd_ctx.accelerometer_state == 0)) {
+            if ((generic_u32 >= (hmd_ctx.accelerometer_last_time_seconds + hmd_ctx.timings.accelerometer_blanking_time_seconds)) && (hmd_ctx.accelerometer_state == 0)) {
                 // Turn sensors on.
                 POWER_enable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_STOP);
-                // Clear interrupt.
-                fxls89xxxx_status = FXLS89XXXX_clear_interrupt(I2C_ADDRESS_FXLS8974CF, &fxls89xxxx_int_src1, &fxls89xxxx_int_src2);
-                FXLS89XXXX_stack_error(ERROR_BASE_FXLS8974CF);
                 // Enable accelerometer.
                 fxls89xxxx_status = FXLS89XXXX_write_configuration(I2C_ADDRESS_FXLS8974CF, FXLS89XXXX_ACTIVE_CONFIGURATION, FXLS89XXXX_ACTIVE_CONFIGURATION_SIZE);
                 FXLS89XXXX_stack_error(ERROR_BASE_FXLS8974CF);
@@ -661,7 +855,7 @@ int main(void) {
             // Go to sleep by default.
             hmd_ctx.state = HMD_STATE_SLEEP;
             // Check wake-up flags.
-#ifdef HMD_ENS16X_ENABLE
+#ifdef HMD_AIR_QUALITY_ENABLE
             if (hmd_ctx.flags.air_quality_request != 0) {
                 hmd_ctx.state = HMD_STATE_AIR_QUALITY;
             }
@@ -674,7 +868,7 @@ int main(void) {
                 hmd_ctx.state = HMD_STATE_BUTTON;
             }
 #endif
-#ifdef HMD_FXLS89XXXX_ENABLE
+#ifdef HMD_ACCELEROMETER_ENABLE
             if (GPIO_read(&GPIO_SENSOR_IRQ) != 0) {
                 hmd_ctx.state = HMD_STATE_ACCELEROMETER;
             }
@@ -686,6 +880,10 @@ int main(void) {
             }
             break;
         case HMD_STATE_SLEEP:
+            // Check reset request.
+            if (hmd_ctx.flags.reset_request != 0) {
+                PWR_software_reset();
+            }
             // Enter stop mode.
             IWDG_reload();
             PWR_enter_deepsleep_mode(PWR_DEEPSLEEP_MODE_STOP);

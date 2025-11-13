@@ -1,17 +1,17 @@
 /*
- * fxls89xxxx_configuration_reg.h
+ * fxls89xxxx_configuration.h
  *
  *  Created on: 17 oct. 2025
  *      Author: Ludo
  */
 
-#ifndef __FXLS89XXXX_CONFIGURATION_REG_H__
-#define __FXLS89XXXX_CONFIGURATION_REG_H__
+#ifndef __FXLS89XXXX_CONFIGURATION_H__
+#define __FXLS89XXXX_CONFIGURATION_H__
 
 #include "fxls89xxxx.h"
 #include "hmd_flags.h"
 
-#ifdef HMD_FXLS89XXXX_ENABLE
+#ifdef HMD_ACCELEROMETER_ENABLE
 
 /*** FXLS89XXXX CONFIGURATION  macros ***/
 
@@ -23,6 +23,6 @@
 extern const FXLS89XXXX_register_setting_t FXLS89XXXX_ACTIVE_CONFIGURATION[FXLS89XXXX_ACTIVE_CONFIGURATION_SIZE];
 extern const FXLS89XXXX_register_setting_t FXLS89XXXX_SLEEP_CONFIGURATION[FXLS89XXXX_SLEEP_CONFIGURATION_SIZE];
 
-#endif /* HMD_FXLS89XXXX_ENABLE */
+#endif /* HMD_ACCELEROMETER_ENABLE */
 
-#endif /* __FXLS89XXXX_CONFIGURATION_REG_H__ */
+#endif /* __FXLS89XXXX_CONFIGURATION_H__ */

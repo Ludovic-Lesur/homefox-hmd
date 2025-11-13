@@ -10,7 +10,7 @@
 #include "fxls89xxxx.h"
 #include "hmd_flags.h"
 
-#ifdef HMD_FXLS89XXXX_ENABLE
+#ifdef HMD_ACCELEROMETER_ENABLE
 
 /*** FXLS89XXXX CONFIGURATION global variables ***/
 
@@ -33,4 +33,4 @@ const FXLS89XXXX_register_setting_t FXLS89XXXX_SLEEP_CONFIGURATION[FXLS89XXXX_SL
     { FXLS89XXXX_REGISTER_SENS_CONFIG1, 0x00 }, // ACTIVE='0'.
 };
 
-#endif /* HMD_FXLS89XXXX_ENABLE */
+#endif /* HMD_ACCELEROMETER_ENABLE */
