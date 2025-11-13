@@ -28,6 +28,7 @@
 // Middleware
 #include "cli.h"
 #include "sigfox_ep_flags.h"
+#include "sigfox_ep_frames.h"
 #include "sigfox_ep_api.h"
 #include "sigfox_rc.h"
 // Applicative.
@@ -36,40 +37,24 @@
 
 /*** MAIN local macros ***/
 
-// Sigfox payload lengths.
-#define HMD_SIGFOX_STARTUP_DATA_SIZE                8
-#define HMD_SIGFOX_ERROR_STACK_DATA_SIZE            12
-#define HMD_SIGFOX_MONITORING_DATA_SIZE             6
 #ifdef HMD_BUTTON_ENABLE
-#define HMD_VBATT_INDICATOR_RANGE                   7
-#define HMD_VBATT_INDICATOR_DELAY_MS                2000
+#define HMD_VBATT_INDICATOR_RANGE           7
+#define HMD_VBATT_INDICATOR_DELAY_MS        2000
 #endif
 #ifdef HMD_ENS16X_ENABLE
-#define HMD_SIGFOX_AIR_QUALITY_DATA_SIZE            7
-#define HMD_ENS16X_ACQUISITION_DELAY_MS             10000
-#define HMD_ENS16X_ACQUISITION_TIMEOUT_MS           300000
+#define HMD_ENS16X_ACQUISITION_DELAY_MS     10000
+#define HMD_ENS16X_ACQUISITION_TIMEOUT_MS   300000
 #ifdef ENS16X_DRIVER_DEVICE_ENS161
-#define HMD_ENS16X_ACQUISITION_MODE                 ENS16X_SENSING_MODE_LOW_POWER
+#define HMD_ENS16X_ACQUISITION_MODE         ENS16X_SENSING_MODE_LOW_POWER
 #else
-#define HMD_ENS16X_ACQUISITION_MODE                 ENS16X_SENSING_MODE_STANDARD
+#define HMD_ENS16X_ACQUISITION_MODE         ENS16X_SENSING_MODE_STANDARD
 #endif
-#endif
-#ifdef HMD_FXLS89XXXX_ENABLE
-#define HMD_SIGFOX_ACCELEROMETER_EVENT_DATA_SIZE    1
 #endif
 // Error stack message period.
-#define HMD_ERROR_STACK_PERIOD_SECONDS              86400
+#define HMD_ERROR_STACK_PERIOD_SECONDS      86400
 // Voltage hysteresis for radio.
-#define HMD_RADIO_ON_VSTR_THRESHOLD_MV              3700
-#define HMD_RADIO_OFF_VSTR_THRESHOLD_MV             3500
-// Error values.
-#define HMD_ERROR_VALUE_ANALOG_16BITS               0xFFFF
-#define HMD_ERROR_VALUE_TEMPERATURE                 0x7FF
-#define HMD_ERROR_VALUE_HUMIDITY                    0xFF
-#define HMD_ERROR_VALUE_TVOC                        0xFFFF
-#define HMD_ERROR_VALUE_ECO2                        0xFFFF
-#define HMD_ERROR_VALUE_AQI_UBA                     0b1111
-#define HMD_ERROR_VALUE_AQI_S                       0xFFF
+#define HMD_RADIO_ON_VSTR_THRESHOLD_MV      3700
+#define HMD_RADIO_OFF_VSTR_THRESHOLD_MV     3500
 
 /*** MAIN local structures ***/
 
@@ -77,15 +62,9 @@
 typedef enum {
     HMD_STATE_STARTUP,
     HMD_STATE_MONITORING,
-#ifdef HMD_BUTTON_ENABLE
     HMD_STATE_BUTTON,
-#endif
-#ifdef HMD_ENS16X_ENABLE
     HMD_STATE_AIR_QUALITY,
-#endif
-#ifdef HMD_FXLS89XXXX_ENABLE
     HMD_STATE_ACCELEROMETER,
-#endif
     HMD_STATE_ERROR_STACK,
     HMD_STATE_TASK_CHECK,
     HMD_STATE_SLEEP,
@@ -118,61 +97,13 @@ typedef union {
     } __attribute__((scalar_storage_order("big-endian"))) __attribute__((packed));
 } HMD_flags_t;
 
-/*******************************************************************/
-typedef union {
-    uint8_t frame[HMD_SIGFOX_STARTUP_DATA_SIZE];
-    struct {
-        unsigned reset_reason :8;
-        unsigned major_version :8;
-        unsigned minor_version :8;
-        unsigned commit_index :8;
-        unsigned commit_id :28;
-        unsigned dirty_flag :4;
-    } __attribute__((scalar_storage_order("big-endian"))) __attribute__((packed));
-} HMD_sigfox_startup_data_t;
-
-/*******************************************************************/
-typedef union {
-    uint8_t frame[HMD_SIGFOX_MONITORING_DATA_SIZE];
-    struct {
-        unsigned vbatt_mv :16;
-        unsigned unused :4;
-        unsigned tamb_tenth_degrees :12;
-        unsigned hamb_percent :8;
-        unsigned status :8;
-    } __attribute__((scalar_storage_order("big-endian"))) __attribute__((packed));
-} HMD_sigfox_monitoring_data_t;
-
-#ifdef HMD_ENS16X_ENABLE
-/*******************************************************************/
-typedef union {
-    uint8_t frame[HMD_SIGFOX_AIR_QUALITY_DATA_SIZE];
-    struct {
-        unsigned acquisition_duration_tens_seconds :6;
-        unsigned acquisition_status :2;
-        unsigned tvoc_ppb :16;
-        unsigned eco2_ppm :16;
-        unsigned aqi_uba :4;
-        unsigned aqi_s :12;
-    } __attribute__((scalar_storage_order("big-endian"))) __attribute__((packed));
-} HMD_sigfox_air_quality_data_t;
-#endif
-
-#ifdef HMD_FXLS89XXXX_ENABLE
-/*******************************************************************/
-typedef union {
-    uint8_t frame[HMD_SIGFOX_ACCELEROMETER_EVENT_DATA_SIZE];
-    struct {
-        unsigned event_source :8;
-    } __attribute__((scalar_storage_order("big-endian"))) __attribute__((packed));
-} HMD_sigfox_accelerometer_event_data_t;
-#endif
-
+#if (!(defined HMD_MODE_CLI) && (defined HMD_BUTTON_ENABLE))
 /*******************************************************************/
 typedef struct {
     int32_t threshold_mv;
     LED_color_t led_color;
 } HMD_vbatt_indicator_t;
+#endif
 
 /*******************************************************************/
 typedef struct {
@@ -233,9 +164,9 @@ static void _HMD_init_context(void) {
     hmd_ctx.flags.all = 0;
     hmd_ctx.flags.radio_enabled = 1;
     hmd_ctx.flags.error_stack_request = 1;
-    hmd_ctx.vbatt_mv = HMD_ERROR_VALUE_ANALOG_16BITS;
-    hmd_ctx.tamb_tenth_degrees = HMD_ERROR_VALUE_TEMPERATURE;
-    hmd_ctx.hamb_percent = HMD_ERROR_VALUE_HUMIDITY;
+    hmd_ctx.vbatt_mv = SIGFOX_EP_ERROR_VALUE_ANALOG_16BITS;
+    hmd_ctx.tamb_tenth_degrees = SIGFOX_EP_ERROR_VALUE_TEMPERATURE;
+    hmd_ctx.hamb_percent = SIGFOX_EP_ERROR_VALUE_HUMIDITY;
     hmd_ctx.monitoring_next_time_seconds = HMD_MONITORING_PERIOD_SECONDS;
     hmd_ctx.error_stack_next_time_seconds = HMD_ERROR_STACK_PERIOD_SECONDS;
 #ifdef HMD_SHT3X_ENABLE
@@ -352,8 +283,8 @@ static void _HMD_update_temperature_humidity(void) {
     uint32_t temperature_signed_magnitude;
     int32_t humidity = 0;
     // Reset data.
-    hmd_ctx.tamb_tenth_degrees = HMD_ERROR_VALUE_TEMPERATURE;
-    hmd_ctx.hamb_percent = HMD_ERROR_VALUE_HUMIDITY;
+    hmd_ctx.tamb_tenth_degrees = SIGFOX_EP_ERROR_VALUE_TEMPERATURE;
+    hmd_ctx.hamb_percent = SIGFOX_EP_ERROR_VALUE_HUMIDITY;
     // Turn sensors on.
     POWER_enable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_STOP);
 #ifdef HMD_ENS21X_ENABLE
@@ -372,7 +303,7 @@ static void _HMD_update_temperature_humidity(void) {
     }
 #endif
 #ifdef HMD_SHT3X_ENABLE
-    if ((hmd_ctx.tamb_tenth_degrees == HMD_ERROR_VALUE_TEMPERATURE) || (hmd_ctx.hamb_percent == HMD_ERROR_VALUE_HUMIDITY)) {
+    if ((hmd_ctx.tamb_tenth_degrees == SIGFOX_EP_ERROR_VALUE_TEMPERATURE) || (hmd_ctx.hamb_percent == SIGFOX_EP_ERROR_VALUE_HUMIDITY)) {
         // Get temperature and humidity from SHT30.
         sht3x_status = SHT3X_get_temperature_humidity(I2C_ADDRESS_SHT30, &temperature, &humidity);
         SHT3X_stack_error(ERROR_BASE_SHT30);
@@ -403,14 +334,14 @@ static void _HMD_update_air_quality(void) {
     // Reset data.
     hmd_ctx.air_quality_acquisition_time_ms = 0;
     hmd_ctx.air_quality_acquisition_status.validity_flag = ENS16X_VALIDITY_FLAG_INVALID_OUTPUT;
-    hmd_ctx.air_quality_data.tvoc_ppb = HMD_ERROR_VALUE_TVOC;
-    hmd_ctx.air_quality_data.eco2_ppm = HMD_ERROR_VALUE_ECO2;
-    hmd_ctx.air_quality_data.aqi_uba = HMD_ERROR_VALUE_AQI_UBA;
+    hmd_ctx.air_quality_data.tvoc_ppb = SIGFOX_EP_ERROR_VALUE_TVOC;
+    hmd_ctx.air_quality_data.eco2_ppm = SIGFOX_EP_ERROR_VALUE_ECO2;
+    hmd_ctx.air_quality_data.aqi_uba = SIGFOX_EP_ERROR_VALUE_AQI_UBA;
 #ifdef ENS16X_DRIVER_DEVICE_ENS161
-    hmd_ctx.air_quality_data.aqi_s = HMD_ERROR_VALUE_AQI_S;
+    hmd_ctx.air_quality_data.aqi_s = SIGFOX_EP_ERROR_VALUE_AQI_S;
 #endif
     // Check if temperature and humidity are available.
-    if ((hmd_ctx.tamb_tenth_degrees == HMD_ERROR_VALUE_TEMPERATURE) || (hmd_ctx.hamb_percent == HMD_ERROR_VALUE_HUMIDITY)) goto errors;
+    if ((hmd_ctx.tamb_tenth_degrees == SIGFOX_EP_ERROR_VALUE_TEMPERATURE) || (hmd_ctx.hamb_percent == SIGFOX_EP_ERROR_VALUE_HUMIDITY)) goto errors;
     // Turn sensors on.
     POWER_enable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_STOP);
     // Start acquisition.
@@ -463,7 +394,7 @@ errors:
 
 #ifndef HMD_MODE_CLI
 /*******************************************************************/
-static void _HMD_send_sigfox_message(SIGFOX_EP_API_application_message_t* application_message) {
+static void _HMD_send_sigfox_message(SIGFOX_EP_API_application_message_t* sigfox_ep_application_message) {
     // Local variables.
     SIGFOX_EP_API_status_t sigfox_ep_api_status = SIGFOX_EP_API_SUCCESS;
     SIGFOX_EP_API_config_t lib_config;
@@ -476,7 +407,7 @@ static void _HMD_send_sigfox_message(SIGFOX_EP_API_application_message_t* applic
     sigfox_ep_api_status = SIGFOX_EP_API_open(&lib_config);
     SIGFOX_EP_API_check_status(0);
     // Send message.
-    sigfox_ep_api_status = SIGFOX_EP_API_send_application_message(application_message);
+    sigfox_ep_api_status = SIGFOX_EP_API_send_application_message(sigfox_ep_application_message);
     SIGFOX_EP_API_check_status(0);
     // Close library.
     sigfox_ep_api_status = SIGFOX_EP_API_close();
@@ -501,35 +432,35 @@ int main(void) {
     // Local variables.
     RCC_status_t rcc_status = RCC_SUCCESS;
     ERROR_code_t error_code = 0;
-    HMD_sigfox_startup_data_t sigfox_startup_data;
-    HMD_sigfox_monitoring_data_t sigfox_monitoring_data;
-    SIGFOX_EP_API_application_message_t application_message;
-    uint8_t sigfox_error_stack_data[HMD_SIGFOX_ERROR_STACK_DATA_SIZE];
+    SIGFOX_EP_ul_payload_startup_t sigfox_ep_ul_payload_startup;
+    SIGFOX_EP_ul_payload_monitoring_t sigfox_ep_ul_payload_monitoring;
+    SIGFOX_EP_API_application_message_t sigfox_ep_application_message;
+    uint8_t sigfox_ep_ul_payload_error_stack[SIGFOX_EP_UL_PAYLOAD_SIZE_ERROR_STACK];
 #ifdef HMD_BUTTON_ENABLE
     LED_status_t led_status = LED_SUCCESS;
     LPTIM_status_t lptim_status = LPTIM_SUCCESS;
 #endif
 #ifdef HMD_ENS16X_ENABLE
-    HMD_sigfox_air_quality_data_t sigfox_air_quality_data;
+    SIGFOX_EP_ul_payload_air_quality_t sigfox_ep_ul_payload_air_quality;
 #endif
 #ifdef HMD_FXLS89XXXX_ENABLE
     FXLS89XXXX_status_t fxls89xxxx_status = FXLS89XXXX_SUCCESS;
     FXLS89XXXX_int_src1_t fxls89xxxx_int_src1;
     FXLS89XXXX_int_src2_t fxls89xxxx_int_src2;
-    HMD_sigfox_accelerometer_event_data_t sigfox_accelerometer_event_data;
+    SIGFOX_EP_ul_payload_accelerometer_t sigfox_ul_payload_accelerometer;
 #endif
     uint8_t idx = 0;
     uint8_t generic_u8;
     uint32_t generic_u32 = 0;
     // Application message default parameters.
-    application_message.common_parameters.number_of_frames = 3;
-    application_message.common_parameters.ul_bit_rate = SIGFOX_UL_BIT_RATE_100BPS;
-    application_message.type = SIGFOX_APPLICATION_MESSAGE_TYPE_BYTE_ARRAY;
+    sigfox_ep_application_message.common_parameters.number_of_frames = 3;
+    sigfox_ep_application_message.common_parameters.ul_bit_rate = SIGFOX_UL_BIT_RATE_100BPS;
+    sigfox_ep_application_message.type = SIGFOX_APPLICATION_MESSAGE_TYPE_BYTE_ARRAY;
 #ifdef SIGFOX_EP_BIDIRECTIONAL
-    application_message.bidirectional_flag = 0;
+    sigfox_ep_application_message.bidirectional_flag = 0;
 #endif
-    application_message.ul_payload = SIGFOX_NULL;
-    application_message.ul_payload_size_bytes = 0;
+    sigfox_ep_application_message.ul_payload = SIGFOX_NULL;
+    sigfox_ep_application_message.ul_payload_size_bytes = 0;
     // Main loop.
     while (1) {
         // Perform state machine.
@@ -537,19 +468,19 @@ int main(void) {
         case HMD_STATE_STARTUP:
             IWDG_reload();
             // Fill reset reason and software version.
-            sigfox_startup_data.reset_reason = PWR_get_reset_flags();
-            sigfox_startup_data.major_version = GIT_MAJOR_VERSION;
-            sigfox_startup_data.minor_version = GIT_MINOR_VERSION;
-            sigfox_startup_data.commit_index = GIT_COMMIT_INDEX;
-            sigfox_startup_data.commit_id = GIT_COMMIT_ID;
-            sigfox_startup_data.dirty_flag = GIT_DIRTY_FLAG;
+            sigfox_ep_ul_payload_startup.reset_reason = PWR_get_reset_flags();
+            sigfox_ep_ul_payload_startup.major_version = GIT_MAJOR_VERSION;
+            sigfox_ep_ul_payload_startup.minor_version = GIT_MINOR_VERSION;
+            sigfox_ep_ul_payload_startup.commit_index = GIT_COMMIT_INDEX;
+            sigfox_ep_ul_payload_startup.commit_id = GIT_COMMIT_ID;
+            sigfox_ep_ul_payload_startup.dirty_flag = GIT_DIRTY_FLAG;
             // Clear reset flags.
             PWR_clear_reset_flags();
             // Send SW version frame.
-            application_message.common_parameters.ul_bit_rate = SIGFOX_UL_BIT_RATE_100BPS;
-            application_message.ul_payload = (sfx_u8*) (sigfox_startup_data.frame);
-            application_message.ul_payload_size_bytes = HMD_SIGFOX_STARTUP_DATA_SIZE;
-            _HMD_send_sigfox_message(&application_message);
+            sigfox_ep_application_message.common_parameters.ul_bit_rate = SIGFOX_UL_BIT_RATE_100BPS;
+            sigfox_ep_application_message.ul_payload = (sfx_u8*) (sigfox_ep_ul_payload_startup.frame);
+            sigfox_ep_application_message.ul_payload_size_bytes = SIGFOX_EP_UL_PAYLOAD_SIZE_STARTUP;
+            _HMD_send_sigfox_message(&sigfox_ep_application_message);
             // Compute next state.
             hmd_ctx.state = HMD_STATE_ERROR_STACK;
             break;
@@ -566,15 +497,15 @@ int main(void) {
             RCC_stack_error(ERROR_BASE_RCC);
             hmd_ctx.status.lse_status = (generic_u8 == 0) ? 0b0 : 0b1;
             // Build frame.
-            sigfox_monitoring_data.status = hmd_ctx.status.all;
-            sigfox_monitoring_data.vbatt_mv = hmd_ctx.vbatt_mv;
-            sigfox_monitoring_data.unused = 0;
-            sigfox_monitoring_data.tamb_tenth_degrees = hmd_ctx.tamb_tenth_degrees;
-            sigfox_monitoring_data.hamb_percent = hmd_ctx.hamb_percent;
+            sigfox_ep_ul_payload_monitoring.status = hmd_ctx.status.all;
+            sigfox_ep_ul_payload_monitoring.vbatt_mv = hmd_ctx.vbatt_mv;
+            sigfox_ep_ul_payload_monitoring.unused = 0;
+            sigfox_ep_ul_payload_monitoring.tamb_tenth_degrees = hmd_ctx.tamb_tenth_degrees;
+            sigfox_ep_ul_payload_monitoring.hamb_percent = hmd_ctx.hamb_percent;
             // Send uplink monitoring frame.
-            application_message.ul_payload = (sfx_u8*) (sigfox_monitoring_data.frame);
-            application_message.ul_payload_size_bytes = HMD_SIGFOX_MONITORING_DATA_SIZE;
-            _HMD_send_sigfox_message(&application_message);
+            sigfox_ep_application_message.ul_payload = (sfx_u8*) (sigfox_ep_ul_payload_monitoring.frame);
+            sigfox_ep_application_message.ul_payload_size_bytes = SIGFOX_EP_UL_PAYLOAD_SIZE_MONITORING;
+            _HMD_send_sigfox_message(&sigfox_ep_application_message);
             // Clear flag.
             hmd_ctx.flags.monitoring_request = 0;
             // Compute next state.
@@ -612,20 +543,20 @@ int main(void) {
             _HMD_update_temperature_humidity();
             _HMD_update_air_quality();
             // Build frame.
-            sigfox_air_quality_data.acquisition_duration_tens_seconds = (hmd_ctx.air_quality_acquisition_time_ms / 10000);
-            sigfox_air_quality_data.acquisition_status = hmd_ctx.air_quality_acquisition_status.validity_flag;
-            sigfox_air_quality_data.tvoc_ppb = hmd_ctx.air_quality_data.tvoc_ppb;
-            sigfox_air_quality_data.eco2_ppm = hmd_ctx.air_quality_data.eco2_ppm;
-            sigfox_air_quality_data.aqi_uba = hmd_ctx.air_quality_data.aqi_uba;
+            sigfox_ep_ul_payload_air_quality.acquisition_duration_tens_seconds = (hmd_ctx.air_quality_acquisition_time_ms / 10000);
+            sigfox_ep_ul_payload_air_quality.acquisition_status = hmd_ctx.air_quality_acquisition_status.validity_flag;
+            sigfox_ep_ul_payload_air_quality.tvoc_ppb = hmd_ctx.air_quality_data.tvoc_ppb;
+            sigfox_ep_ul_payload_air_quality.eco2_ppm = hmd_ctx.air_quality_data.eco2_ppm;
+            sigfox_ep_ul_payload_air_quality.aqi_uba = hmd_ctx.air_quality_data.aqi_uba;
 #ifdef ENS16X_DRIVER_DEVICE_ENS161
-            sigfox_air_quality_data.aqi_s = hmd_ctx.air_quality_data.aqi_s;
+            sigfox_ep_ul_payload_air_quality.aqi_s = hmd_ctx.air_quality_data.aqi_s;
 #else
-            sigfox_air_quality_data.aqi_s = HMD_ERROR_VALUE_AQI_S;
+            sigfox_ep_ul_payload_air_quality.aqi_s = SIGFOX_EP_ERROR_VALUE_AQI_S;
 #endif
             // Send uplink air quality frame.
-            application_message.ul_payload = (sfx_u8*) (sigfox_air_quality_data.frame);
-            application_message.ul_payload_size_bytes = HMD_SIGFOX_AIR_QUALITY_DATA_SIZE;
-            _HMD_send_sigfox_message(&application_message);
+            sigfox_ep_application_message.ul_payload = (sfx_u8*) (sigfox_ep_ul_payload_air_quality.frame);
+            sigfox_ep_application_message.ul_payload_size_bytes = SIGFOX_EP_UL_PAYLOAD_SIZE_AIR_QUALITY;
+            _HMD_send_sigfox_message(&sigfox_ep_application_message);
             // Clear flag.
             hmd_ctx.flags.air_quality_request = 0;
             // Compute next state.
@@ -651,11 +582,11 @@ int main(void) {
             // Turn sensors off.
             POWER_disable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS);
             // Check status.
-            sigfox_accelerometer_event_data.event_source = ((fxls89xxxx_status == FXLS89XXXX_SUCCESS) ? (fxls89xxxx_int_src1.all) : 0);
+            sigfox_ul_payload_accelerometer.event_source = ((fxls89xxxx_status == FXLS89XXXX_SUCCESS) ? (fxls89xxxx_int_src1.all) : 0);
             // Send uplink air quality frame.
-            application_message.ul_payload = (sfx_u8*) (sigfox_accelerometer_event_data.frame);
-            application_message.ul_payload_size_bytes = HMD_SIGFOX_ACCELEROMETER_EVENT_DATA_SIZE;
-            _HMD_send_sigfox_message(&application_message);
+            sigfox_ep_application_message.ul_payload = (sfx_u8*) (sigfox_ul_payload_accelerometer.frame);
+            sigfox_ep_application_message.ul_payload_size_bytes = SIGFOX_EP_UL_PAYLOAD_SIZE_ACCELEROMETER;
+            _HMD_send_sigfox_message(&sigfox_ep_application_message);
             // Compute next state.
             hmd_ctx.state = HMD_STATE_TASK_CHECK;
             break;
@@ -671,16 +602,16 @@ int main(void) {
                 // Check stack.
                 if (ERROR_stack_is_empty() == 0) {
                     // Read error stack.
-                    for (idx = 0; idx < (HMD_SIGFOX_ERROR_STACK_DATA_SIZE >> 1); idx++) {
+                    for (idx = 0; idx < (SIGFOX_EP_UL_PAYLOAD_SIZE_ERROR_STACK >> 1); idx++) {
                         error_code = ERROR_stack_read();
-                        sigfox_error_stack_data[(idx << 1) + 0] = (uint8_t) ((error_code >> 8) & 0x00FF);
-                        sigfox_error_stack_data[(idx << 1) + 1] = (uint8_t) ((error_code >> 0) & 0x00FF);
+                        sigfox_ep_ul_payload_error_stack[(idx << 1) + 0] = (uint8_t) ((error_code >> 8) & 0x00FF);
+                        sigfox_ep_ul_payload_error_stack[(idx << 1) + 1] = (uint8_t) ((error_code >> 0) & 0x00FF);
                     }
                     // Send error stack frame.
-                    application_message.common_parameters.ul_bit_rate = SIGFOX_UL_BIT_RATE_100BPS;
-                    application_message.ul_payload = (sfx_u8*) (sigfox_error_stack_data);
-                    application_message.ul_payload_size_bytes = HMD_SIGFOX_ERROR_STACK_DATA_SIZE;
-                    _HMD_send_sigfox_message(&application_message);
+                    sigfox_ep_application_message.common_parameters.ul_bit_rate = SIGFOX_UL_BIT_RATE_100BPS;
+                    sigfox_ep_application_message.ul_payload = (sfx_u8*) (sigfox_ep_ul_payload_error_stack);
+                    sigfox_ep_application_message.ul_payload_size_bytes = SIGFOX_EP_UL_PAYLOAD_SIZE_ERROR_STACK;
+                    _HMD_send_sigfox_message(&sigfox_ep_application_message);
                 }
             }
             // Compute next state.
