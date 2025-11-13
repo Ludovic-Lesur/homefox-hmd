@@ -768,6 +768,7 @@ int main(void) {
             // Disable interrupt on MCU side.
             SENSORS_HW_disable_accelerometer_interrupt();
             // Turn sensors on.
+            LED_set_color(LED_COLOR_GREEN);
             POWER_enable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_STOP);
             // Disable accelerometer.
             fxls89xxxx_status = FXLS89XXXX_write_configuration(I2C_ADDRESS_FXLS8974CF, FXLS89XXXX_SLEEP_CONFIGURATION, FXLS89XXXX_SLEEP_CONFIGURATION_SIZE);
@@ -777,6 +778,7 @@ int main(void) {
             FXLS89XXXX_stack_error(ERROR_BASE_FXLS8974CF);
             // Turn sensors off.
             POWER_disable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS);
+            LED_set_color(LED_COLOR_OFF);
             // Check status.
             sigfox_ul_payload_accelerometer.event_source = ((fxls89xxxx_status == FXLS89XXXX_SUCCESS) ? (fxls89xxxx_int_src1.all) : 0);
             // Send uplink air quality frame.
@@ -846,12 +848,14 @@ int main(void) {
             // Check accelerometer blanking time.
             if ((generic_u32 >= (hmd_ctx.accelerometer_last_time_seconds + hmd_ctx.timings.accelerometer_blanking_time_seconds)) && (hmd_ctx.accelerometer_state == 0)) {
                 // Turn sensors on.
+                LED_set_color(LED_COLOR_GREEN);
                 POWER_enable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_STOP);
                 // Enable accelerometer.
                 fxls89xxxx_status = FXLS89XXXX_write_configuration(I2C_ADDRESS_FXLS8974CF, FXLS89XXXX_ACTIVE_CONFIGURATION, FXLS89XXXX_ACTIVE_CONFIGURATION_SIZE);
                 FXLS89XXXX_stack_error(ERROR_BASE_FXLS8974CF);
                 // Turn sensors off.
                 POWER_disable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS);
+                LED_set_color(LED_COLOR_OFF);
                 // Enable interrupt on MCU side.
                 SENSORS_HW_enable_accelerometer_interrupt();
                 // Update state.
