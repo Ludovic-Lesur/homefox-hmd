@@ -244,6 +244,7 @@ RF_API_status_t RF_API_init(RF_API_radio_parameters_t* radio_parameters) {
 #endif
     // Turn radio on.
     POWER_enable(POWER_REQUESTER_ID_RF_API, POWER_DOMAIN_RADIO, LPTIM_DELAY_MODE_SLEEP);
+    LED_set_color(LED_COLOR_BLUE);
     // Exit reset.
     sx126x_status = SX126X_reset(0);
     SX126X_stack_exit_error(ERROR_BASE_SX1261, (RF_API_status_t) RF_API_ERROR_DRIVER_SX126X);
@@ -357,6 +358,8 @@ RF_API_status_t RF_API_de_init(void) {
         SX126X_stack_error(ERROR_BASE_SX1261);
         status = (RF_API_status_t) RF_API_ERROR_DRIVER_SX126X;
     }
+    // Turn radio off.
+    LED_set_color(LED_COLOR_OFF);
     POWER_disable(POWER_REQUESTER_ID_RF_API, POWER_DOMAIN_RADIO);
     SIGFOX_RETURN();
 }

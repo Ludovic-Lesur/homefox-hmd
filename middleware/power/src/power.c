@@ -71,7 +71,6 @@ void POWER_enable(POWER_requester_id_t requester_id, POWER_domain_t domain, LPTI
     SX126X_status_t sx126x_status = SX126X_SUCCESS;
     RFE_status_t rfe_status = RFE_SUCCESS;
     LPTIM_status_t lptim_status = LPTIM_SUCCESS;
-    LED_status_t led_status = LED_SUCCESS;
     uint32_t delay_ms = 0;
     uint8_t action_required = 0;
     // Check parameters.
@@ -119,9 +118,6 @@ void POWER_enable(POWER_requester_id_t requester_id, POWER_domain_t domain, LPTI
         fxls89xxxx_status = FXLS89XXXX_init();
         _POWER_stack_driver_error(fxls89xxxx_status, FXLS89XXXX_SUCCESS, ERROR_BASE_FXLS8974CF, POWER_ERROR_DRIVER_FXLS89XXXX);
 #endif
-        // Turn green LED on.
-        led_status = LED_set_color(LED_COLOR_GREEN);
-        _POWER_stack_driver_error(led_status, LED_SUCCESS, ERROR_BASE_LED, POWER_ERROR_DRIVER_LED);
         break;
     case POWER_DOMAIN_TCXO:
         // Turn TCXO on.
@@ -137,9 +133,6 @@ void POWER_enable(POWER_requester_id_t requester_id, POWER_domain_t domain, LPTI
         _POWER_stack_driver_error(sx126x_status, SX126X_SUCCESS, ERROR_BASE_SX1261, POWER_ERROR_DRIVER_SX126X);
         rfe_status = RFE_init();
         _POWER_stack_driver_error(rfe_status, RFE_SUCCESS, ERROR_BASE_RFE, POWER_ERROR_DRIVER_RFE);
-        // Turn blue LED on.
-        led_status = LED_set_color(LED_COLOR_BLUE);
-        _POWER_stack_driver_error(led_status, LED_SUCCESS, ERROR_BASE_LED, POWER_ERROR_DRIVER_LED);
         break;
     default:
         ERROR_stack_add(ERROR_BASE_POWER + POWER_ERROR_DOMAIN);
@@ -172,7 +165,6 @@ void POWER_disable(POWER_requester_id_t requester_id, POWER_domain_t domain) {
 #endif
     SX126X_status_t sx126x_status = SX126X_SUCCESS;
     RFE_status_t rfe_status = RFE_SUCCESS;
-    LED_status_t led_status = LED_SUCCESS;
     // Check parameters.
     if (requester_id >= POWER_REQUESTER_ID_LAST) {
         ERROR_stack_add(ERROR_BASE_POWER + POWER_ERROR_REQUESTER_ID);
@@ -216,9 +208,6 @@ void POWER_disable(POWER_requester_id_t requester_id, POWER_domain_t domain) {
 #endif
         // Turn digital sensors off.
         GPIO_write(&GPIO_SENSORS_POWER_ENABLE, 0);
-        // Turn LED off.
-        led_status = LED_set_color(LED_COLOR_OFF);
-        _POWER_stack_driver_error(led_status, LED_SUCCESS, ERROR_BASE_LED, POWER_ERROR_DRIVER_LED);
         break;
     case POWER_DOMAIN_TCXO:
         // Turn TCXO off.
@@ -232,9 +221,6 @@ void POWER_disable(POWER_requester_id_t requester_id, POWER_domain_t domain) {
         _POWER_stack_driver_error(sx126x_status, SX126X_SUCCESS, ERROR_BASE_SX1261, POWER_ERROR_DRIVER_SX126X);
         // Turn radio off.
         GPIO_write(&GPIO_RF_POWER_ENABLE, 0);
-        // Turn LED off.
-        led_status = LED_set_color(LED_COLOR_OFF);
-        _POWER_stack_driver_error(led_status, LED_SUCCESS, ERROR_BASE_LED, POWER_ERROR_DRIVER_LED);
         break;
     default:
         ERROR_stack_add(ERROR_BASE_POWER + POWER_ERROR_DOMAIN);

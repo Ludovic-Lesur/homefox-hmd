@@ -431,6 +431,7 @@ static void _HMD_update_temperature_humidity(void) {
     hmd_ctx.hamb_percent = SIGFOX_EP_ERROR_VALUE_HUMIDITY;
 #if ((defined HMD_TEMPERATURE_HUMIDITY_SHT3X_ENABLE) || (defined HMD_TEMPERATURE_HUMIDITY_ENS21X_ENABLE))
     // Turn sensors on.
+    LED_set_color(LED_COLOR_GREEN);
     POWER_enable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_STOP);
 #endif
 #ifdef HMD_TEMPERATURE_HUMIDITY_ENS21X_ENABLE
@@ -468,6 +469,7 @@ static void _HMD_update_temperature_humidity(void) {
 #if ((defined HMD_TEMPERATURE_HUMIDITY_SHT3X_ENABLE) || (defined HMD_TEMPERATURE_HUMIDITY_ENS21X_ENABLE))
     // Turn sensors off.
     POWER_disable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS);
+    LED_set_color(LED_COLOR_OFF);
 #endif
 }
 #endif
@@ -501,9 +503,12 @@ static void _HMD_update_air_quality(void) {
         do {
             // Reload watchdog.
             IWDG_reload();
+            LED_set_color(LED_COLOR_OFF);
             // Low power delay.
             lptim_status = LPTIM_delay_milliseconds(HMD_AIR_QUALITY_ACQUISITION_DELAY_MS, LPTIM_DELAY_MODE_STOP);
             LPTIM_stack_error(ERROR_BASE_LPTIM);
+            // Blink green LED.
+            LED_set_color(LED_COLOR_GREEN);
             // Update duration.
             hmd_ctx.air_quality_acquisition_time_ms += HMD_AIR_QUALITY_ACQUISITION_DELAY_MS;
             // Read device status.
@@ -534,6 +539,7 @@ static void _HMD_update_air_quality(void) {
         ENS16X_stack_error(ERROR_BASE_ENS16X);
         // Turn sensors off.
         POWER_disable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS);
+        LED_set_color(LED_COLOR_OFF);
     }
 errors:
     return;
