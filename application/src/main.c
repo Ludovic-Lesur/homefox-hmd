@@ -45,16 +45,15 @@
 #define HMD_MONITORING_PERIOD_MINUTES_MAX                   10080
 // Downlink period.
 #define HMD_DOWNLINK_PERIOD_SECONDS                         86400
-// Error stack message period.
+// Error stack.
 #define HMD_ERROR_STACK_BLANKING_TIME_SECONDS               86400
 // Voltage hysteresis for radio.
 #define HMD_RADIO_ON_VSTR_THRESHOLD_MV                      3700
 #define HMD_RADIO_OFF_VSTR_THRESHOLD_MV                     3500
-#ifdef HMD_BUTTON_ENABLE
+// VBATT indicator.
 #define HMD_VBATT_INDICATOR_RANGE                           7
 #define HMD_VBATT_INDICATOR_DELAY_MS                        3000
-#endif
-#ifdef HMD_AIR_QUALITY_ENABLE
+// Air quality.
 #define HMD_AIR_QUALITY_PERIOD_MINUTES_DEFAULT              60
 #define HMD_AIR_QUALITY_PERIOD_MINUTES_MIN                  10
 #define HMD_AIR_QUALITY_PERIOD_MINUTES_MAX                  10080
@@ -65,11 +64,9 @@
 #else
 #define HMD_AIR_QUALITY_ACQUISITION_MODE                    ENS16X_SENSING_MODE_STANDARD
 #endif
-#endif
-#ifdef HMD_ACCELEROMETER_ENABLE
+// Accelerometer.
 #define HMD_ACCELEROMETER_BLANKING_TIME_SECONDS_DEFAULT     60
 #define HMD_ACCELEROMETER_BLANKING_TIME_SECONDS_MAX         17280
-#endif
 
 /*** MAIN local structures ***/
 
@@ -388,6 +385,8 @@ static void _HMD_update_battery_voltage(void) {
     // Local variables.
     ANALOG_status_t analog_status = ANALOG_SUCCESS;
     int32_t vbatt = 0;
+    // Reset data.
+    hmd_ctx.vbatt_mv = SIGFOX_EP_ERROR_VALUE_ANALOG_16BITS;
     // Turn ADC on.
     POWER_enable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_ANALOG, LPTIM_DELAY_MODE_ACTIVE);
     // Perform battery voltage measurement.
@@ -629,14 +628,15 @@ int main(void) {
     _HMD_init_hw();
     // Local variables.
     RCC_status_t rcc_status = RCC_SUCCESS;
-    ERROR_code_t error_code = 0;
+    SIGFOX_EP_API_application_message_t sigfox_ep_application_message;
     SIGFOX_EP_ul_payload_startup_t sigfox_ep_ul_payload_startup;
     SIGFOX_EP_ul_payload_monitoring_t sigfox_ep_ul_payload_monitoring;
-    SIGFOX_EP_API_application_message_t sigfox_ep_application_message;
+    ERROR_code_t error_code = 0;
     uint8_t sigfox_ep_ul_payload_error_stack[SIGFOX_EP_UL_PAYLOAD_SIZE_ERROR_STACK];
 #ifdef HMD_BUTTON_ENABLE
     LED_status_t led_status = LED_SUCCESS;
     LPTIM_status_t lptim_status = LPTIM_SUCCESS;
+    LED_color_t led_color = LED_COLOR_OFF;
 #endif
 #ifdef HMD_AIR_QUALITY_ENABLE
     SIGFOX_EP_ul_payload_air_quality_t sigfox_ep_ul_payload_air_quality;
@@ -671,7 +671,7 @@ int main(void) {
             sigfox_ep_ul_payload_startup.dirty_flag = GIT_DIRTY_FLAG;
             // Clear reset flags.
             PWR_clear_reset_flags();
-            // Send SW version frame.
+            // Send startup message.
             sigfox_ep_application_message.common_parameters.ul_bit_rate = SIGFOX_UL_BIT_RATE_100BPS;
             sigfox_ep_application_message.ul_payload = (sfx_u8*) (sigfox_ep_ul_payload_startup.frame);
             sigfox_ep_application_message.ul_payload_size_bytes = SIGFOX_EP_UL_PAYLOAD_SIZE_STARTUP;
@@ -701,7 +701,7 @@ int main(void) {
             sigfox_ep_application_message.ul_payload = (sfx_u8*) (sigfox_ep_ul_payload_monitoring.frame);
             sigfox_ep_application_message.ul_payload_size_bytes = SIGFOX_EP_UL_PAYLOAD_SIZE_MONITORING;
             _HMD_send_sigfox_message(&sigfox_ep_application_message);
-            // Clear flag.
+            // Clear request.
             hmd_ctx.flags.monitoring_request = 0;
             // Compute next state.
             hmd_ctx.state = HMD_STATE_ERROR_STACK;
@@ -712,20 +712,28 @@ int main(void) {
             // Measure related data.
             _HMD_update_battery_voltage();
             // Compute LED color.
-            for (generic_u8 = 0; generic_u8 < HMD_VBATT_INDICATOR_RANGE; generic_u8++) {
-                if (hmd_ctx.vbatt_mv >= HMD_VBATT_INDICATOR[generic_u8].threshold_mv) {
-                    // Turn LED on.
-                    led_status = LED_set_color(HMD_VBATT_INDICATOR[generic_u8].led_color);
-                    LED_stack_error(ERROR_BASE_LED);
-                    break;
+            if (hmd_ctx.vbatt_mv == SIGFOX_EP_ERROR_VALUE_ANALOG_16BITS) {
+                led_color = LED_COLOR_OFF;
+            }
+            else {
+                for (generic_u8 = 0; generic_u8 < HMD_VBATT_INDICATOR_RANGE; generic_u8++) {
+                    if (hmd_ctx.vbatt_mv >= HMD_VBATT_INDICATOR[generic_u8].threshold_mv) {
+                        // Turn LED on.
+                        led_color = HMD_VBATT_INDICATOR[generic_u8].led_color;
+                        break;
+                    }
                 }
             }
+            // Turn LED on.
+            led_status = LED_set_color(led_color);
+            LED_stack_error(ERROR_BASE_LED);
+            // Delay.
             lptim_status = LPTIM_delay_milliseconds(HMD_VBATT_INDICATOR_DELAY_MS, LPTIM_DELAY_MODE_STOP);
             LPTIM_stack_error(ERROR_BASE_LPTIM);
             // Turn LED off.
             led_status = LED_set_color(LED_COLOR_OFF);
             LED_stack_error(ERROR_BASE_LED);
-            // Clear flag.
+            // Clear request.
             hmd_ctx.flags.button_request = 0;
             // Compute next state.
             hmd_ctx.state = HMD_STATE_TASK_CHECK;
@@ -752,7 +760,7 @@ int main(void) {
             sigfox_ep_application_message.ul_payload = (sfx_u8*) (sigfox_ep_ul_payload_air_quality.frame);
             sigfox_ep_application_message.ul_payload_size_bytes = SIGFOX_EP_UL_PAYLOAD_SIZE_AIR_QUALITY;
             _HMD_send_sigfox_message(&sigfox_ep_application_message);
-            // Clear flag.
+            // Clear request.
             hmd_ctx.flags.air_quality_request = 0;
             // Compute next state.
             hmd_ctx.state = HMD_STATE_ERROR_STACK;
@@ -790,7 +798,7 @@ int main(void) {
 #endif
         case HMD_STATE_ERROR_STACK:
             IWDG_reload();
-            // Check period.
+            // Check if blanking time elapsed.
             if (hmd_ctx.flags.error_stack_enable != 0) {
                 // Import Sigfox library error stack.
                 ERROR_import_sigfox_stack();
@@ -821,13 +829,13 @@ int main(void) {
             generic_u32 = RTC_get_uptime_seconds();
             // Periodic monitoring.
             if (generic_u32 >= (hmd_ctx.monitoring_last_time_seconds + (hmd_ctx.timings.monitoring_period_minutes * 60))) {
-               // Set request and compute next time.
+               // Set request and update last time.
                hmd_ctx.flags.monitoring_request = 1;
                hmd_ctx.monitoring_last_time_seconds = generic_u32;
             }
             // Periodic downlink.
             if (generic_u32 >= (hmd_ctx.downlink_last_time_seconds + HMD_DOWNLINK_PERIOD_SECONDS)) {
-               // Set request and compute next time.
+               // Set request and update last time.
                hmd_ctx.flags.downlink_request = 1;
                hmd_ctx.downlink_last_time_seconds = generic_u32;
             }
@@ -838,7 +846,7 @@ int main(void) {
             }
 #ifdef HMD_AIR_QUALITY_ENABLE
             if (generic_u32 >= (hmd_ctx.air_quality_last_time_seconds + (hmd_ctx.timings.air_quality_period_minutes * 60))) {
-               // Set request and compute next time.
+               // Set request and update last time.
                hmd_ctx.flags.air_quality_request = 1;
                hmd_ctx.air_quality_last_time_seconds = generic_u32;
             }
