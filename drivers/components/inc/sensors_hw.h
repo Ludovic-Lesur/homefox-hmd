@@ -66,26 +66,22 @@ ERROR_code_t SENSORS_HW_i2c_read(ERROR_code_t i2c_error_base, uint8_t i2c_addres
  *******************************************************************/
 ERROR_code_t SENSORS_HW_delay_milliseconds(ERROR_code_t delay_error_base, uint32_t delay_ms);
 
-#ifdef HMD_ACCELEROMETER_ENABLE
 /*!******************************************************************
- * \fn void SENSORS_HW_enable_accelerometer_interrupt(void)
- * \brief Enable accelerometer interrupt.
+ * \fn void SENSORS_HW_enable_sensor_interrupt(void)
+ * \brief Enable sensor interrupt.
  * \param[in]   none
  * \param[out]  none
  * \retval      none
  *******************************************************************/
-void SENSORS_HW_enable_accelerometer_interrupt(void);
-#endif
+void SENSORS_HW_enable_sensor_interrupt(void);
 
-#ifdef HMD_ACCELEROMETER_ENABLE
 /*!******************************************************************
- * \fn void SENSORS_HW_disable_accelerometer_interrupt(void)
- * \brief Disable accelerometer interrupt.
+ * \fn void SENSORS_HW_disable_sensor_interrupt(void)
+ * \brief Disable sensor interrupt.
  * \param[in]   none
  * \param[out]  none
  * \retval      none
  *******************************************************************/
-void SENSORS_HW_disable_accelerometer_interrupt(void);
-#endif
+void SENSORS_HW_disable_sensor_interrupt(void);
 
 #endif /* __SENSORS_HW_H__ */

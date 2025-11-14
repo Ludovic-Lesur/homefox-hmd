@@ -641,7 +641,7 @@ static AT_status_t _CLI_acc_control_callback(void) {
     // Check state.
     if (state == 0) {
         // Disable interrupt.
-        SENSORS_HW_disable_accelerometer_interrupt();
+        SENSORS_HW_disable_sensor_interrupt();
         // Configure accelerometer in sleep mode.
         fxls89xxxx_status = FXLS89XXXX_write_configuration(I2C_ADDRESS_FXLS8974CF, FXLS89XXXX_SLEEP_CONFIGURATION, FXLS89XXXX_SLEEP_CONFIGURATION_SIZE);
         _CLI_check_driver_status(fxls89xxxx_status, FXLS89XXXX_SUCCESS, ERROR_BASE_FXLS8974CF);
@@ -655,7 +655,7 @@ static AT_status_t _CLI_acc_control_callback(void) {
         fxls89xxxx_status = FXLS89XXXX_write_configuration(I2C_ADDRESS_FXLS8974CF, FXLS89XXXX_ACTIVE_CONFIGURATION, FXLS89XXXX_ACTIVE_CONFIGURATION_SIZE);
         _CLI_check_driver_status(fxls89xxxx_status, FXLS89XXXX_SUCCESS, ERROR_BASE_FXLS8974CF);
         // Enable interrupt.
-        SENSORS_HW_enable_accelerometer_interrupt();
+        SENSORS_HW_enable_sensor_interrupt();
     }
     return status;
 errors:

@@ -9,6 +9,7 @@
 
 #include "error.h"
 #include "error_base.h"
+#include "exti.h"
 #include "hmd_flags.h"
 #include "i2c.h"
 #include "lptim.h"
@@ -77,23 +78,19 @@ errors:
     return status;
 }
 
-#ifdef HMD_ACCELEROMETER_ENABLE
 /*******************************************************************/
-void SENSORS_HW_enable_accelerometer_interrupt(void) {
-    // Configure accelerometer interrupt pin.
+void SENSORS_HW_enable_sensor_interrupt(void) {
+    // Configure sensor interrupt pin.
     EXTI_configure_gpio(&GPIO_SENSOR_IRQ, GPIO_PULL_NONE, EXTI_TRIGGER_RISING_EDGE, NULL, NVIC_PRIORITY_SENSOR);
     // Enable interrupt.
     EXTI_clear_gpio_flag(&GPIO_SENSOR_IRQ);
     EXTI_enable_gpio_interrupt(&GPIO_SENSOR_IRQ);
 }
-#endif
 
-#ifdef HMD_ACCELEROMETER_ENABLE
 /*******************************************************************/
-void SENSORS_HW_disable_accelerometer_interrupt(void) {
+void SENSORS_HW_disable_sensor_interrupt(void) {
     // Disable interrupt.
     EXTI_disable_gpio_interrupt(&GPIO_SENSOR_IRQ);
-    // Release accelerometer interrupt pin.
+    // Release sensor interrupt pin.
     EXTI_release_gpio(&GPIO_SENSOR_IRQ, GPIO_MODE_ANALOG);
 }
-#endif

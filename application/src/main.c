@@ -136,15 +136,14 @@ typedef struct {
     volatile HMD_flags_t flags;
     // Monitoring.
     uint32_t monitoring_last_time_seconds;
+    uint16_t vbatt_mv;
+    uint16_t tamb_tenth_degrees;
+    uint8_t hamb_percent;
     // Downlink.
     uint32_t downlink_last_time_seconds;
     HMD_timings_t timings;
     // Error stack.
     uint32_t error_stack_last_time_seconds;
-    // Data.
-    uint16_t vbatt_mv;
-    uint16_t tamb_tenth_degrees;
-    uint8_t hamb_percent;
 #ifdef HMD_AIR_QUALITY_ENABLE
     uint32_t air_quality_last_time_seconds;
     uint32_t air_quality_acquisition_time_ms;
@@ -766,7 +765,7 @@ int main(void) {
             hmd_ctx.accelerometer_state = 0;
             hmd_ctx.accelerometer_last_time_seconds = RTC_get_uptime_seconds();
             // Disable interrupt on MCU side.
-            SENSORS_HW_disable_accelerometer_interrupt();
+            SENSORS_HW_disable_sensor_interrupt();
             // Turn sensors on.
             LED_set_color(LED_COLOR_MAGENTA);
             POWER_enable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_STOP);
@@ -857,7 +856,7 @@ int main(void) {
                 POWER_disable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS);
                 LED_set_color(LED_COLOR_OFF);
                 // Enable interrupt on MCU side.
-                SENSORS_HW_enable_accelerometer_interrupt();
+                SENSORS_HW_enable_sensor_interrupt();
                 // Update state.
                 hmd_ctx.accelerometer_state = 1;
             }
