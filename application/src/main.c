@@ -52,7 +52,7 @@
 #define HMD_RADIO_OFF_VSTR_THRESHOLD_MV                     3500
 #ifdef HMD_BUTTON_ENABLE
 #define HMD_VBATT_INDICATOR_RANGE                           7
-#define HMD_VBATT_INDICATOR_DELAY_MS                        2000
+#define HMD_VBATT_INDICATOR_DELAY_MS                        3000
 #endif
 #ifdef HMD_AIR_QUALITY_ENABLE
 #define HMD_AIR_QUALITY_PERIOD_MINUTES_DEFAULT              60
@@ -507,8 +507,8 @@ static void _HMD_update_air_quality(void) {
             // Low power delay.
             lptim_status = LPTIM_delay_milliseconds(HMD_AIR_QUALITY_ACQUISITION_DELAY_MS, LPTIM_DELAY_MODE_STOP);
             LPTIM_stack_error(ERROR_BASE_LPTIM);
-            // Blink green LED.
-            LED_set_color(LED_COLOR_GREEN);
+            // Blink yellow LED.
+            LED_set_color(LED_COLOR_YELLOW);
             // Update duration.
             hmd_ctx.air_quality_acquisition_time_ms += HMD_AIR_QUALITY_ACQUISITION_DELAY_MS;
             // Read device status.
@@ -768,7 +768,7 @@ int main(void) {
             // Disable interrupt on MCU side.
             SENSORS_HW_disable_accelerometer_interrupt();
             // Turn sensors on.
-            LED_set_color(LED_COLOR_GREEN);
+            LED_set_color(LED_COLOR_MAGENTA);
             POWER_enable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_STOP);
             // Disable accelerometer.
             fxls89xxxx_status = FXLS89XXXX_write_configuration(I2C_ADDRESS_FXLS8974CF, FXLS89XXXX_SLEEP_CONFIGURATION, FXLS89XXXX_SLEEP_CONFIGURATION_SIZE);
@@ -848,7 +848,7 @@ int main(void) {
             // Check accelerometer blanking time.
             if ((generic_u32 >= (hmd_ctx.accelerometer_last_time_seconds + hmd_ctx.timings.accelerometer_blanking_time_seconds)) && (hmd_ctx.accelerometer_state == 0)) {
                 // Turn sensors on.
-                LED_set_color(LED_COLOR_GREEN);
+                LED_set_color(LED_COLOR_MAGENTA);
                 POWER_enable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_STOP);
                 // Enable accelerometer.
                 fxls89xxxx_status = FXLS89XXXX_write_configuration(I2C_ADDRESS_FXLS8974CF, FXLS89XXXX_ACTIVE_CONFIGURATION, FXLS89XXXX_ACTIVE_CONFIGURATION_SIZE);
