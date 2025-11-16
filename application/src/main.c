@@ -102,8 +102,8 @@ typedef union {
 typedef union {
     uint8_t all;
     struct {
-        unsigned reset_request :1;
         unsigned radio_enabled : 1;
+        unsigned reset_request :1;
         unsigned downlink_request :1;
         unsigned air_quality_request :1;
         unsigned button_request :1;
@@ -583,7 +583,7 @@ static void _HMD_send_sigfox_message(SIGFOX_EP_API_application_message_t* sigfox
             SIGFOX_EP_API_check_status(0);
             if (sigfox_ep_api_status == SIGFOX_EP_API_SUCCESS) {
                 // Parse payload.
-                switch (dl_payload.frame[0]) {
+                switch (dl_payload.op_code) {
                 case SIGFOX_EP_DL_OP_CODE_NOP:
                     // Nothing to do.
                     break;
