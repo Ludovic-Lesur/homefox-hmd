@@ -28,8 +28,14 @@ RFE_status_t RFE_init(void) {
     // Local variables.
     RFE_status_t status = RFE_SUCCESS;
     // Configure GPIOs.
-    GPIO_configure(&GPIO_RF_SWITCH_CONTROL, GPIO_MODE_OUTPUT, GPIO_TYPE_PUSH_PULL, GPIO_SPEED_LOW, GPIO_PULL_NONE);
-    GPIO_write(&GPIO_RF_SWITCH_CONTROL, 0);
+#ifdef HW1_0
+    GPIO_configure(&GPIO_RF_RX_ENABLE, GPIO_MODE_OUTPUT, GPIO_TYPE_PUSH_PULL, GPIO_SPEED_LOW, GPIO_PULL_NONE);
+    GPIO_write(&GPIO_RF_RX_ENABLE, 0);
+#endif
+    GPIO_configure(&GPIO_RF_TX_ENABLE, GPIO_MODE_OUTPUT, GPIO_TYPE_PUSH_PULL, GPIO_SPEED_LOW, GPIO_PULL_NONE);
+    GPIO_write(&GPIO_RF_TX_ENABLE, 0);
+    GPIO_configure(&GPIO_RF_LNA_BYPASS, GPIO_MODE_OUTPUT, GPIO_TYPE_PUSH_PULL, GPIO_SPEED_LOW, GPIO_PULL_NONE);
+    GPIO_write(&GPIO_RF_LNA_BYPASS, 0);
     return status;
 }
 
@@ -50,13 +56,39 @@ RFE_status_t RFE_set_path(RFE_path_t radio_path) {
     RFE_status_t status = RFE_SUCCESS;
     switch (radio_path) {
     case RFE_PATH_NONE:
+#ifdef HW1_0
+        GPIO_write(&GPIO_RF_RX_ENABLE, 0);
+#endif
+#ifdef HW2_0
+        GPIO_write(&GPIO_RF_TX_ENABLE, 0);
+        GPIO_write(&GPIO_RF_LNA_BYPASS, 0);
+#endif
+        break;
     case RFE_PATH_TX:
-        GPIO_write(&GPIO_RF_SWITCH_CONTROL, 0);
+#ifdef HW1_0
+        GPIO_write(&GPIO_RF_RX_ENABLE, 0);
+#endif
+#ifdef HW2_0
+        GPIO_write(&GPIO_RF_TX_ENABLE, 1);
+        GPIO_write(&GPIO_RF_LNA_BYPASS, 1);
+#endif
         break;
 #ifdef SIGFOX_EP_BIDIRECTIONAL
-    case RFE_PATH_RX:
-        GPIO_write(&GPIO_RF_SWITCH_CONTROL, 1);
+    case RFE_PATH_RX_BYPASS:
+#ifdef HW1_0
+        GPIO_write(&GPIO_RF_RX_ENABLE, 1);
+#endif
+#ifdef HW2_0
+        GPIO_write(&GPIO_RF_TX_ENABLE, 0);
+        GPIO_write(&GPIO_RF_LNA_BYPASS, 1);
+#endif
         break;
+#ifdef HW2_0
+    case RFE_PATH_RX_LNA:
+        GPIO_write(&GPIO_RF_TX_ENABLE, 0);
+        GPIO_write(&GPIO_RF_LNA_BYPASS, 0);
+        break;
+#endif
 #endif
     default:
         status = RFE_ERROR_PATH;

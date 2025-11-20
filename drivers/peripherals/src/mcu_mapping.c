@@ -38,17 +38,31 @@ const ADC_gpio_t ADC_GPIO = { (const GPIO_pin_t**) &GPIO_ADC_PINS_LIST, ADC_CHAN
 // Button.
 const GPIO_pin_t GPIO_BUTTON = { GPIOA, 0, 2, 0 };
 // Radio power control.
+#ifdef HW1_0
 const GPIO_pin_t GPIO_RF_POWER_ENABLE = { GPIOA, 0, 12, 0 };
 const GPIO_pin_t GPIO_TCXO_POWER_ENABLE = { GPIOB, 1, 2, 0 };
-// RF switch.
-const GPIO_pin_t GPIO_RF_SWITCH_CONTROL = { GPIOA, 0, 3, 0 };
+#endif
+#ifdef HW2_0
+const GPIO_pin_t GPIO_RF_POWER_ENABLE = { GPIOA, 0, 11, 0 };
+const GPIO_pin_t GPIO_TCXO_POWER_ENABLE = { GPIOA, 0, 12, 0 };
+#endif
+// RF front-end.
+#ifdef HW1_0
+const GPIO_pin_t GPIO_RF_RX_ENABLE = { GPIOA, 0, 3, 0 };
+#endif
+#ifdef HW2_0
+const GPIO_pin_t GPIO_RF_TX_ENABLE = { GPIOA, 0, 3, 0 };
+const GPIO_pin_t GPIO_RF_LNA_BYPASS = { GPIOB, 1, 2, 0 };
+#endif
 // S2LP.
 const SPI_gpio_t SPI_GPIO_SX1261 = { &GPIO_SPI1_SCK, &GPIO_SPI1_MOSI, &GPIO_SPI1_MISO };
 const GPIO_pin_t GPIO_SX1261_CS = { GPIOA, 0, 4, 0 };
 const GPIO_pin_t GPIO_SX1261_NRESET = { GPIOB, 1, 0, 0 };
 const GPIO_pin_t GPIO_SX1261_BUSY = { GPIOB, 1, 1, 0 };
 const GPIO_pin_t GPIO_SX1261_DIO1 = { GPIOA, 0, 8, 0 };
+#ifdef HW1_0
 const GPIO_pin_t GPIO_SX1261_DIO2 = { GPIOA, 0, 11, 0 };
+#endif
 // Sensors.
 const GPIO_pin_t GPIO_SENSORS_POWER_ENABLE = { GPIOB, 1, 3, 0 };
 const I2C_gpio_t I2C_GPIO_SENSORS = { &GPIO_I2C1_SCL, &GPIO_I2C1_SDA };

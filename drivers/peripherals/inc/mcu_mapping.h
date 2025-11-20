@@ -47,15 +47,23 @@ extern const GPIO_pin_t GPIO_BUTTON;
 // Radio power control.
 extern const GPIO_pin_t GPIO_RF_POWER_ENABLE;
 extern const GPIO_pin_t GPIO_TCXO_POWER_ENABLE;
-// RF switch.
-extern const GPIO_pin_t GPIO_RF_SWITCH_CONTROL;
+// RF front-end.
+#ifdef HW1_0
+extern const GPIO_pin_t GPIO_RF_RX_ENABLE;
+#endif
+#ifdef HW2_0
+extern const GPIO_pin_t GPIO_RF_TX_ENABLE;
+extern const GPIO_pin_t GPIO_RF_LNA_BYPASS;
+#endif
 // SX1261.
 extern const SPI_gpio_t SPI_GPIO_SX1261;
 extern const GPIO_pin_t GPIO_SX1261_CS;
 extern const GPIO_pin_t GPIO_SX1261_NRESET;
 extern const GPIO_pin_t GPIO_SX1261_BUSY;
 extern const GPIO_pin_t GPIO_SX1261_DIO1;
+#ifdef HW1_0
 extern const GPIO_pin_t GPIO_SX1261_DIO2;
+#endif
 // Sensors.
 extern const GPIO_pin_t GPIO_SENSORS_POWER_ENABLE;
 extern const I2C_gpio_t I2C_GPIO_SENSORS;

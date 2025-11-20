@@ -326,7 +326,12 @@ RF_API_status_t RF_API_init(RF_API_radio_parameters_t* radio_parameters) {
         sx126x_status = SX126X_set_gfsk_packet(&gfsk_packet_parameters);
         SX126X_stack_exit_error(ERROR_BASE_SX1261, (RF_API_status_t) RF_API_ERROR_DRIVER_SX126X);
         // Switch to RX.
-        rfe_status = RFE_set_path(RFE_PATH_RX);
+#ifdef HW1_0
+        rfe_status = RFE_set_path(RFE_PATH_RX_BYPASS);
+#endif
+#ifdef HW2_0
+        rfe_status = RFE_set_path(RFE_PATH_RX_LNA);
+#endif
         RFE_stack_exit_error(ERROR_BASE_RFE, (RF_API_status_t) RF_API_ERROR_DRIVER_RFE);
         break;
 #endif
