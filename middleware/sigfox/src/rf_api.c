@@ -85,6 +85,7 @@ typedef enum {
     RF_API_ERROR_MODULATION,
     RF_API_ERROR_BIT_RATE,
     RF_API_ERROR_MODE,
+    RF_API_ERROR_SX126X_STATUS,
     RF_API_ERROR_TX_TIMEOUT,
     RF_API_ERROR_LATENCY_TYPE,
     // Low level drivers errors.
@@ -231,6 +232,7 @@ RF_API_status_t RF_API_init(RF_API_radio_parameters_t* radio_parameters) {
     SX126X_status_t sx126x_status = SX126X_SUCCESS;
     RFE_status_t rfe_status = RFE_SUCCESS;
     SX126X_modulation_parameters_t modulation_parameters;
+    uint16_t op_error = 0;
 #ifdef SIGFOX_EP_BIDIRECTIONAL
     sfx_u8 dl_ft[SIGFOX_DL_FT_SIZE_BYTES] = SIGFOX_DL_FT;
     SX126X_gfsk_packet_parameters_t gfsk_packet_parameters;
@@ -248,6 +250,9 @@ RF_API_status_t RF_API_init(RF_API_radio_parameters_t* radio_parameters) {
     // Exit reset.
     sx126x_status = SX126X_reset(0);
     SX126X_stack_exit_error(ERROR_BASE_SX1261, (RF_API_status_t) RF_API_ERROR_DRIVER_SX126X);
+    // Enter standby RC mode.
+    sx126x_status = SX126X_set_mode(SX126X_MODE_STANDBY_RC);
+    SX126X_stack_exit_error(ERROR_BASE_SX1261, (RF_API_status_t) RF_API_ERROR_DRIVER_SX126X);
     // Regulation mode.
     sx126x_status = SX126X_set_regulation_mode(SX126X_REGULATION_MODE_DCDC);
     SX126X_stack_exit_error(ERROR_BASE_SX1261, (RF_API_status_t) RF_API_ERROR_DRIVER_SX126X);
@@ -256,6 +261,9 @@ RF_API_status_t RF_API_init(RF_API_radio_parameters_t* radio_parameters) {
     SX126X_stack_exit_error(ERROR_BASE_SX1261, (RF_API_status_t) RF_API_ERROR_DRIVER_SX126X);
     // Calibration.
     sx126x_status = SX126X_calibrate(RF_API_FREQUENCY_MIN_MHZ, RF_API_FREQUENCY_MAX_MHZ);
+    SX126X_stack_exit_error(ERROR_BASE_SX1261, (RF_API_status_t) RF_API_ERROR_DRIVER_SX126X);
+    // Enter standby XOSC mode.
+    sx126x_status = SX126X_set_mode(SX126X_MODE_STANDBY_XOSC);
     SX126X_stack_exit_error(ERROR_BASE_SX1261, (RF_API_status_t) RF_API_ERROR_DRIVER_SX126X);
     // Frequency.
     sx126x_status = SX126X_set_rf_frequency(radio_parameters->frequency_hz);
@@ -338,6 +346,13 @@ RF_API_status_t RF_API_init(RF_API_radio_parameters_t* radio_parameters) {
     default:
         SIGFOX_EXIT_ERROR((RF_API_status_t) RF_API_ERROR_MODE);
         break;
+    }
+    // Read device errors at the end of initialization.
+    sx126x_status = SX126X_get_device_errors(&op_error);
+    SX126X_stack_exit_error(ERROR_BASE_SX1261, (RF_API_status_t) RF_API_ERROR_DRIVER_SX126X);
+    // Exit if there any error in device status.
+    if (op_error != 0) {
+        SIGFOX_EXIT_ERROR((RF_API_status_t) RF_API_ERROR_SX126X_STATUS);
     }
 errors:
     SIGFOX_RETURN();
