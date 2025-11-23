@@ -1,0 +1,6 @@
+r
+loadfile nucleo-l053r8/hmd.hex
+verifyfile nucleo-l053r8/hmd.hex
+r
+g
+qc

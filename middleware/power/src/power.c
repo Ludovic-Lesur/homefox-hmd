@@ -48,8 +48,10 @@ void POWER_init(void) {
     // Init power control pins.
     GPIO_configure(&GPIO_MNTR_EN, GPIO_MODE_OUTPUT, GPIO_TYPE_PUSH_PULL, GPIO_SPEED_LOW, GPIO_PULL_NONE);
     GPIO_configure(&GPIO_SENSORS_POWER_ENABLE, GPIO_MODE_OUTPUT, GPIO_TYPE_PUSH_PULL, GPIO_SPEED_LOW, GPIO_PULL_NONE);
+#ifndef NUCLEO_L053R8
     GPIO_configure(&GPIO_TCXO_POWER_ENABLE, GPIO_MODE_OUTPUT, GPIO_TYPE_PUSH_PULL, GPIO_SPEED_LOW, GPIO_PULL_NONE);
     GPIO_configure(&GPIO_RF_POWER_ENABLE, GPIO_MODE_OUTPUT, GPIO_TYPE_PUSH_PULL, GPIO_SPEED_LOW, GPIO_PULL_NONE);
+#endif
 }
 
 /*******************************************************************/
@@ -120,14 +122,18 @@ void POWER_enable(POWER_requester_id_t requester_id, POWER_domain_t domain, LPTI
 #endif
         break;
     case POWER_DOMAIN_TCXO:
+#ifndef NUCLEO_L053R8
         // Turn TCXO on.
         GPIO_write(&GPIO_TCXO_POWER_ENABLE, 1);
         delay_ms = POWER_ON_DELAY_MS_TCXO;
+#endif
         break;
     case POWER_DOMAIN_RADIO:
+#ifndef NUCLEO_L053R8
         // Turn radio on.
         GPIO_write(&GPIO_RF_POWER_ENABLE, 1);
         delay_ms = POWER_ON_DELAY_MS_RADIO;
+#endif
         // Init attached drivers.
         sx126x_status = SX126X_init();
         _POWER_stack_driver_error(sx126x_status, SX126X_SUCCESS, ERROR_BASE_SX1261, POWER_ERROR_DRIVER_SX126X);
@@ -210,8 +216,10 @@ void POWER_disable(POWER_requester_id_t requester_id, POWER_domain_t domain) {
         GPIO_write(&GPIO_SENSORS_POWER_ENABLE, 0);
         break;
     case POWER_DOMAIN_TCXO:
+#ifndef NUCLEO_L053R8
         // Turn TCXO off.
         GPIO_write(&GPIO_TCXO_POWER_ENABLE, 0);
+#endif
         break;
     case POWER_DOMAIN_RADIO:
         // Release attached drivers.
@@ -219,8 +227,10 @@ void POWER_disable(POWER_requester_id_t requester_id, POWER_domain_t domain) {
         _POWER_stack_driver_error(rfe_status, RFE_SUCCESS, ERROR_BASE_RFE, POWER_ERROR_DRIVER_RFE);
         sx126x_status = SX126X_de_init();
         _POWER_stack_driver_error(sx126x_status, SX126X_SUCCESS, ERROR_BASE_SX1261, POWER_ERROR_DRIVER_SX126X);
+#ifndef NUCLEO_L053R8
         // Turn radio off.
         GPIO_write(&GPIO_RF_POWER_ENABLE, 0);
+#endif
         break;
     default:
         ERROR_stack_add(ERROR_BASE_POWER + POWER_ERROR_DOMAIN);

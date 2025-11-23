@@ -28,6 +28,10 @@ RFE_status_t RFE_init(void) {
     // Local variables.
     RFE_status_t status = RFE_SUCCESS;
     // Configure GPIOs.
+#ifdef NUCLEO_L053R8
+    GPIO_configure(&GPIO_RF_ANT_SWITCH, GPIO_MODE_OUTPUT, GPIO_TYPE_PUSH_PULL, GPIO_SPEED_LOW, GPIO_PULL_NONE);
+    GPIO_write(&GPIO_RF_ANT_SWITCH, 1);
+#else
 #ifdef HW1_0
     GPIO_configure(&GPIO_RF_RX_ENABLE, GPIO_MODE_OUTPUT, GPIO_TYPE_PUSH_PULL, GPIO_SPEED_LOW, GPIO_PULL_NONE);
     GPIO_write(&GPIO_RF_RX_ENABLE, 0);
@@ -37,6 +41,7 @@ RFE_status_t RFE_init(void) {
     GPIO_write(&GPIO_RF_TX_ENABLE, 0);
     GPIO_configure(&GPIO_RF_LNA_BYPASS, GPIO_MODE_OUTPUT, GPIO_TYPE_PUSH_PULL, GPIO_SPEED_LOW, GPIO_PULL_NONE);
     GPIO_write(&GPIO_RF_LNA_BYPASS, 0);
+#endif
 #endif
     return status;
 }

@@ -54,6 +54,7 @@
 #include "pwr.h"
 #include "rfe.h"
 #include "sx126x.h"
+#include "sx126x_hw.h"
 #include "tim.h"
 #include "types.h"
 
@@ -257,8 +258,20 @@ RF_API_status_t RF_API_init(RF_API_radio_parameters_t* radio_parameters) {
     sx126x_status = SX126X_set_regulation_mode(SX126X_REGULATION_MODE_DCDC);
     SX126X_stack_exit_error(ERROR_BASE_SX1261, (RF_API_status_t) RF_API_ERROR_DRIVER_SX126X);
     // Oscillator.
+#ifdef NUCLEO_L053R8
+    sx126x_status = SX126X_set_oscillator(SX126X_OSCILLATOR_QUARTZ, SX126X_TCXO_VOLTAGE_1V6, RF_API_TCXO_TIMEOUT_MS);
+    SX126X_stack_exit_error(ERROR_BASE_SX1261, (RF_API_status_t) RF_API_ERROR_DRIVER_SX126X);
+    // DIO2 as RF switch.
+    uint8_t command[2] = { 0x9D, 0x01 };
+    uint8_t data[2];
+    sx126x_status = SX126X_HW_wait_busy_low();
+    SX126X_stack_exit_error(ERROR_BASE_SX1261, (RF_API_status_t) RF_API_ERROR_DRIVER_SX126X);
+    sx126x_status = SX126X_HW_spi_write_read_8(command, data, 2);
+    SX126X_stack_exit_error(ERROR_BASE_SX1261, (RF_API_status_t) RF_API_ERROR_DRIVER_SX126X);
+#else
     sx126x_status = SX126X_set_oscillator(SX126X_OSCILLATOR_TCXO, SX126X_TCXO_VOLTAGE_1V6, RF_API_TCXO_TIMEOUT_MS);
     SX126X_stack_exit_error(ERROR_BASE_SX1261, (RF_API_status_t) RF_API_ERROR_DRIVER_SX126X);
+#endif
     // Calibration.
     sx126x_status = SX126X_calibrate(RF_API_FREQUENCY_MIN_MHZ, RF_API_FREQUENCY_MAX_MHZ);
     SX126X_stack_exit_error(ERROR_BASE_SX1261, (RF_API_status_t) RF_API_ERROR_DRIVER_SX126X);

@@ -45,15 +45,21 @@ extern const ADC_gpio_t ADC_GPIO;
 // Button.
 extern const GPIO_pin_t GPIO_BUTTON;
 // Radio power control.
+#ifndef NUCLEO_L053R8
 extern const GPIO_pin_t GPIO_RF_POWER_ENABLE;
 extern const GPIO_pin_t GPIO_TCXO_POWER_ENABLE;
+#endif
 // RF front-end.
+#ifdef NUCLEO_L053R8
+extern const GPIO_pin_t GPIO_RF_ANT_SWITCH;
+#else
 #ifdef HW1_0
 extern const GPIO_pin_t GPIO_RF_RX_ENABLE;
 #endif
 #ifdef HW2_0
 extern const GPIO_pin_t GPIO_RF_TX_ENABLE;
 extern const GPIO_pin_t GPIO_RF_LNA_BYPASS;
+#endif
 #endif
 // SX1261.
 extern const SPI_gpio_t SPI_GPIO_SX1261;
