@@ -35,12 +35,12 @@ ENS21X_status_t ENS21X_HW_i2c_write(uint8_t i2c_address, uint8_t* data, uint8_t 
 }
 
 /*******************************************************************/
-ENS21X_status_t __attribute__((weak)) ENS21X_HW_i2c_read(uint8_t i2c_address, uint8_t* data, uint8_t data_size_bytes) {
+ENS21X_status_t ENS21X_HW_i2c_read(uint8_t i2c_address, uint8_t* data, uint8_t data_size_bytes) {
     return ((ENS21X_status_t) SENSORS_HW_i2c_read(ENS21X_ERROR_BASE_I2C, i2c_address, data, data_size_bytes));
 }
 
 /*******************************************************************/
-ENS21X_status_t __attribute__((weak)) ENS21X_HW_delay_milliseconds(uint32_t delay_ms) {
+ENS21X_status_t ENS21X_HW_delay_milliseconds(uint32_t delay_ms) {
     return ((ENS21X_status_t) SENSORS_HW_delay_milliseconds(ENS21X_ERROR_BASE_DELAY, delay_ms));
 }
 

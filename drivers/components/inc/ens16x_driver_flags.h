@@ -10,6 +10,7 @@
 
 #include "hmd_flags.h"
 #include "i2c.h"
+#include "lptim.h"
 
 /*** ENS16X driver compilation flags ***/
 
@@ -17,7 +18,8 @@
 #define ENS16X_DRIVER_DISABLE
 #endif
 
-#define ENS16X_DRIVER_I2C_ERROR_BASE_LAST   I2C_ERROR_BASE_LAST
+#define ENS16X_DRIVER_I2C_ERROR_BASE_LAST       I2C_ERROR_BASE_LAST
+#define ENS16X_DRIVER_DELAY_ERROR_BASE_LAST     LPTIM_ERROR_BASE_LAST
 
 #ifdef HW2_0
 #define ENS16X_DRIVER_DEVICE_ENS161

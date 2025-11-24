@@ -35,12 +35,12 @@ SHT3X_status_t SHT3X_HW_i2c_write(uint8_t i2c_address, uint8_t* data, uint8_t da
 }
 
 /*******************************************************************/
-SHT3X_status_t __attribute__((weak)) SHT3X_HW_i2c_read(uint8_t i2c_address, uint8_t* data, uint8_t data_size_bytes) {
+SHT3X_status_t SHT3X_HW_i2c_read(uint8_t i2c_address, uint8_t* data, uint8_t data_size_bytes) {
     return ((SHT3X_status_t) SENSORS_HW_i2c_read(SHT3X_ERROR_BASE_I2C, i2c_address, data, data_size_bytes));
 }
 
 /*******************************************************************/
-SHT3X_status_t __attribute__((weak)) SHT3X_HW_delay_milliseconds(uint32_t delay_ms) {
+SHT3X_status_t SHT3X_HW_delay_milliseconds(uint32_t delay_ms) {
     return ((SHT3X_status_t) SENSORS_HW_delay_milliseconds(SHT3X_ERROR_BASE_DELAY, delay_ms));
 }
 
