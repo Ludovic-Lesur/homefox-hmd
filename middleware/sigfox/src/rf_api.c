@@ -259,6 +259,9 @@ RF_API_status_t RF_API_init(RF_API_radio_parameters_t* radio_parameters) {
     // Oscillator.
     sx126x_status = SX126X_set_oscillator(SX126X_OSCILLATOR_TCXO, SX126X_TCXO_VOLTAGE_1V6, RF_API_TCXO_TIMEOUT_MS);
     SX126X_stack_exit_error(ERROR_BASE_SX1261, (RF_API_status_t) RF_API_ERROR_DRIVER_SX126X);
+    // Clear device errors.
+    sx126x_status = SX126X_clear_device_errors();
+    SX126X_stack_exit_error(ERROR_BASE_SX1261, (RF_API_status_t) RF_API_ERROR_DRIVER_SX126X);
     // Calibration.
     sx126x_status = SX126X_calibrate(RF_API_FREQUENCY_MIN_MHZ, RF_API_FREQUENCY_MAX_MHZ);
     SX126X_stack_exit_error(ERROR_BASE_SX1261, (RF_API_status_t) RF_API_ERROR_DRIVER_SX126X);
@@ -320,6 +323,9 @@ RF_API_status_t RF_API_init(RF_API_radio_parameters_t* radio_parameters) {
         break;
 #ifdef SIGFOX_EP_BIDIRECTIONAL
     case RF_API_MODE_RX:
+        // Improved AGC and AFC settings.
+        sx126x_status = SX126X_set_agc_afc_configuration();
+        SX126X_stack_exit_error(ERROR_BASE_SX1261, (RF_API_status_t) RF_API_ERROR_DRIVER_SX126X);
         // LNA mode.
         sx126x_status = SX126X_set_lna_mode(SX126X_LNA_MODE_BOOST);
         SX126X_stack_exit_error(ERROR_BASE_SX1261, (RF_API_status_t) RF_API_ERROR_DRIVER_SX126X);
@@ -604,6 +610,7 @@ void RF_API_error(void) {
     // Force all front-end off.
     SX126X_reset(1);
     RFE_set_path(RFE_PATH_NONE);
+    LED_set_color(LED_COLOR_OFF);
     POWER_disable(POWER_REQUESTER_ID_RF_API, POWER_DOMAIN_TCXO);
     POWER_disable(POWER_REQUESTER_ID_RF_API, POWER_DOMAIN_RADIO);
 }

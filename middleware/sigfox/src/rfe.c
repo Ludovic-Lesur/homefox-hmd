@@ -17,9 +17,18 @@
 #include "sx126x.h"
 #include "types.h"
 
-/*** RFE local macros ***/
+/*** RFE local global variables ***/
 
-#define RFE_RX_OFFSET_DB    0
+#ifdef SIGFOX_EP_BIDIRECTIONAL
+#ifdef HW1_0
+static const int16_t RFE_RSSI_OFFSET_DB[RFE_PATH_LAST] = { 0, 0, 2 };
+#endif
+#ifdef HW2_0
+static const int16_t RFE_RSSI_OFFSET_DB[RFE_PATH_LAST] = { 0, 0, (-2), 15 };
+#endif
+#endif
+
+static RFE_path_t rfe_current_path = RFE_PATH_NONE;
 
 /*** RFE functions ***/
 
@@ -96,11 +105,12 @@ RFE_status_t RFE_set_path(RFE_path_t radio_path) {
         status = RFE_ERROR_PATH;
         goto errors;
     }
+    rfe_current_path = radio_path;
 errors:
     return status;
 }
 
-#if ((defined SIGFOX_EP_BIDIRECTIONAL) && !(defined SX126X_DRIVER_DISABLE))
+#ifdef SIGFOX_EP_BIDIRECTIONAL
 /*******************************************************************/
 RFE_status_t RFE_get_rssi(SX126X_rssi_t rssi_type, int16_t* rssi_dbm) {
     // Local variables.
@@ -110,7 +120,7 @@ RFE_status_t RFE_get_rssi(SX126X_rssi_t rssi_type, int16_t* rssi_dbm) {
     sx126x_status = SX126X_get_rssi(rssi_type, rssi_dbm);
     SX126X_exit_error(RFE_ERROR_BASE_SX126X);
     // Apply calibration gain.
-    (*rssi_dbm) += RFE_RX_OFFSET_DB;
+    (*rssi_dbm) -= RFE_RSSI_OFFSET_DB[rfe_current_path];
 errors:
     return status;
 }
