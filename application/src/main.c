@@ -58,7 +58,9 @@
 #define HMD_AIR_QUALITY_PERIOD_MINUTES_MIN                  10
 #define HMD_AIR_QUALITY_PERIOD_MINUTES_MAX                  10080
 #define HMD_AIR_QUALITY_ACQUISITION_DELAY_MS                10000
-#define HMD_AIR_QUALITY_ACQUISITION_TIMEOUT_MS              300000
+#define HMD_AIR_QUALITY_ACQUISITION_LED_BLINK_MS            100
+#define HMD_AIR_QUALITY_ACQUISITION_TIME_MIN_MS             120000
+#define HMD_AIR_QUALITY_ACQUISITION_TIME_MAX_MS             360000
 #ifdef ENS16X_DRIVER_DEVICE_ENS161
 #define HMD_AIR_QUALITY_ACQUISITION_MODE                    ENS16X_SENSING_MODE_LOW_POWER
 #else
@@ -502,36 +504,42 @@ static void _HMD_update_air_quality(void) {
             // Reload watchdog.
             IWDG_reload();
             LED_set_color(LED_COLOR_OFF);
-            // Low power delay.
-            lptim_status = LPTIM_delay_milliseconds(HMD_AIR_QUALITY_ACQUISITION_DELAY_MS, LPTIM_DELAY_MODE_STOP);
+            // Low power acquisition delay.
+            lptim_status = LPTIM_delay_milliseconds((HMD_AIR_QUALITY_ACQUISITION_DELAY_MS - HMD_AIR_QUALITY_ACQUISITION_LED_BLINK_MS), LPTIM_DELAY_MODE_STOP);
             LPTIM_stack_error(ERROR_BASE_LPTIM);
             // Blink yellow LED.
             LED_set_color(LED_COLOR_YELLOW);
+            // LED delay.
+            lptim_status = LPTIM_delay_milliseconds(HMD_AIR_QUALITY_ACQUISITION_LED_BLINK_MS, LPTIM_DELAY_MODE_SLEEP);
+            LPTIM_stack_error(ERROR_BASE_LPTIM);
             // Update duration.
             hmd_ctx.air_quality_acquisition_time_ms += HMD_AIR_QUALITY_ACQUISITION_DELAY_MS;
-            // Read device status.
-            ens16x_status = ENS16X_get_device_status(I2C_ADDRESS_ENS16X, &hmd_ctx.air_quality_acquisition_status);
-            ENS16X_stack_error(ERROR_BASE_ENS16X);
-            // Check status.
-            if (ens16x_status != ENS16X_SUCCESS) break;
-            // Check data validity.
-            if (hmd_ctx.air_quality_acquisition_status.validity_flag == ENS16X_VALIDITY_FLAG_NORMAL_OPERATION) {
-                // Read data.
-                ens16x_status = ENS16X_read_air_quality(I2C_ADDRESS_ENS16X, &air_quality_data);
+            // Check minimum time.
+            if (hmd_ctx.air_quality_acquisition_time_ms >= HMD_AIR_QUALITY_ACQUISITION_TIME_MIN_MS) {
+                // Read device status.
+                ens16x_status = ENS16X_get_device_status(I2C_ADDRESS_ENS16X, &hmd_ctx.air_quality_acquisition_status);
                 ENS16X_stack_error(ERROR_BASE_ENS16X);
                 // Check status.
-                if (ens16x_status == ENS16X_SUCCESS) {
-                    hmd_ctx.air_quality_data.tvoc_ppb = (air_quality_data.tvoc_ppb);
-                    hmd_ctx.air_quality_data.eco2_ppm = (air_quality_data.eco2_ppm);
-                    hmd_ctx.air_quality_data.aqi_uba = (air_quality_data.aqi_uba);
+                if (ens16x_status != ENS16X_SUCCESS) break;
+                // Check data validity.
+                if (hmd_ctx.air_quality_acquisition_status.validity_flag == ENS16X_VALIDITY_FLAG_NORMAL_OPERATION) {
+                    // Read data.
+                    ens16x_status = ENS16X_read_air_quality(I2C_ADDRESS_ENS16X, &air_quality_data);
+                    ENS16X_stack_error(ERROR_BASE_ENS16X);
+                    // Check status.
+                    if (ens16x_status == ENS16X_SUCCESS) {
+                        hmd_ctx.air_quality_data.tvoc_ppb = (air_quality_data.tvoc_ppb);
+                        hmd_ctx.air_quality_data.eco2_ppm = (air_quality_data.eco2_ppm);
+                        hmd_ctx.air_quality_data.aqi_uba = (air_quality_data.aqi_uba);
 #ifdef ENS16X_DRIVER_DEVICE_ENS161
-                    hmd_ctx.air_quality_data.aqi_s = (air_quality_data.aqi_s);
+                        hmd_ctx.air_quality_data.aqi_s = (air_quality_data.aqi_s);
 #endif
+                    }
+                    break;
                 }
-                break;
             }
         }
-        while (hmd_ctx.air_quality_acquisition_time_ms < HMD_AIR_QUALITY_ACQUISITION_TIMEOUT_MS);
+        while (hmd_ctx.air_quality_acquisition_time_ms < HMD_AIR_QUALITY_ACQUISITION_TIME_MAX_MS);
         // Stop acquisition.
         ens16x_status = ENS16X_stop_acquisition(I2C_ADDRESS_ENS16X);
         ENS16X_stack_error(ERROR_BASE_ENS16X);
