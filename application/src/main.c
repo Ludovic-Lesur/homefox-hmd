@@ -481,8 +481,6 @@ static void _HMD_init_context(void) {
     // Load configuration from NVM.
     _HMD_load_timings();
     _HMD_load_led_color();
-    _HMD_store_timings(&hmd_ctx.timings);
-    _HMD_store_led_color(&hmd_ctx.led_color);
 }
 #endif
 
@@ -538,6 +536,9 @@ static void _HMD_init_hw(void) {
 #endif
     led_status = LED_init();
     LED_stack_error(ERROR_BASE_LED);
+    // Init device configuration.
+    _HMD_store_timings(&hmd_ctx.timings);
+    _HMD_store_led_color(&hmd_ctx.led_color);
 }
 
 #ifndef HMD_MODE_CLI
