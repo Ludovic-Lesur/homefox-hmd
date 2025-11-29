@@ -126,8 +126,6 @@ typedef union {
                 unsigned accelerometer_blanking_time_seconds :16;
                 unsigned unused: 8;
             } __attribute__((scalar_storage_order("big-endian"))) __attribute__((packed)) set_timings;
-        };
-        union {
             struct {
                 unsigned sigfox_uplink :8;
                 unsigned sigfox_downlink :8;
