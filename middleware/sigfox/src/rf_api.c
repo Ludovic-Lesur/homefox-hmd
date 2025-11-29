@@ -92,7 +92,8 @@ typedef enum {
     RF_API_ERROR_DRIVER_MCU_API,
     RF_API_ERROR_DRIVER_SX126X,
     RF_API_ERROR_DRIVER_RFE,
-    RF_API_ERROR_DRIVER_TIM
+    RF_API_ERROR_DRIVER_TIM,
+    RF_API_ERROR_DRIVER_LED
 } RF_API_custom_status_t;
 
 /*******************************************************************/
@@ -231,6 +232,7 @@ RF_API_status_t RF_API_init(RF_API_radio_parameters_t* radio_parameters) {
     RF_API_status_t status = RF_API_SUCCESS;
     SX126X_status_t sx126x_status = SX126X_SUCCESS;
     RFE_status_t rfe_status = RFE_SUCCESS;
+    LED_status_t led_status = LED_SUCCESS;
     SX126X_modulation_parameters_t modulation_parameters;
     uint16_t op_error = 0;
 #ifdef SIGFOX_EP_BIDIRECTIONAL
@@ -246,7 +248,6 @@ RF_API_status_t RF_API_init(RF_API_radio_parameters_t* radio_parameters) {
 #endif
     // Turn radio on.
     POWER_enable(POWER_REQUESTER_ID_RF_API, POWER_DOMAIN_RADIO, LPTIM_DELAY_MODE_SLEEP);
-    LED_set_color(LED_COLOR_BLUE);
     // Exit reset.
     sx126x_status = SX126X_reset(0);
     SX126X_stack_exit_error(ERROR_BASE_SX1261, (RF_API_status_t) RF_API_ERROR_DRIVER_SX126X);
@@ -320,6 +321,9 @@ RF_API_status_t RF_API_init(RF_API_radio_parameters_t* radio_parameters) {
         // Switch to TX.
         rfe_status = RFE_set_path(RFE_PATH_TX);
         RFE_stack_exit_error(ERROR_BASE_RFE, (RF_API_status_t) RF_API_ERROR_DRIVER_RFE);
+        // Turn LED on.
+        led_status = LED_set_activity(LED_ACTIVITY_SIGFOX_UPLINK);
+        LED_stack_exit_error(ERROR_BASE_LED, (RF_API_status_t) RF_API_ERROR_DRIVER_LED);
         break;
 #ifdef SIGFOX_EP_BIDIRECTIONAL
     case RF_API_MODE_RX:
@@ -347,6 +351,9 @@ RF_API_status_t RF_API_init(RF_API_radio_parameters_t* radio_parameters) {
         rfe_status = RFE_set_path(RFE_PATH_RX_LNA);
 #endif
         RFE_stack_exit_error(ERROR_BASE_RFE, (RF_API_status_t) RF_API_ERROR_DRIVER_RFE);
+        // Turn LED on.
+        led_status = LED_set_activity(LED_ACTIVITY_SIGFOX_DOWNLINK);
+        LED_stack_exit_error(ERROR_BASE_LED, (RF_API_status_t) RF_API_ERROR_DRIVER_LED);
         break;
 #endif
     default:
@@ -370,6 +377,7 @@ RF_API_status_t RF_API_de_init(void) {
     RF_API_status_t status = RF_API_SUCCESS;
     SX126X_status_t sx126x_status = SX126X_SUCCESS;
     RFE_status_t rfe_status = RFE_SUCCESS;
+    LED_status_t led_status = LED_SUCCESS;
     // Disable front-end.
     rfe_status = RFE_set_path(RFE_PATH_NONE);
     // Check status.
@@ -384,8 +392,14 @@ RF_API_status_t RF_API_de_init(void) {
         SX126X_stack_error(ERROR_BASE_SX1261);
         status = (RF_API_status_t) RF_API_ERROR_DRIVER_SX126X;
     }
+    // Turn LED off.
+    led_status = LED_set_activity(LED_ACTIVITY_NONE);
+    // Check status.
+    if (led_status != LED_SUCCESS) {
+        LED_stack_error(ERROR_BASE_LED);
+        status = (RF_API_status_t) RF_API_ERROR_DRIVER_LED;
+    }
     // Turn radio off.
-    LED_set_color(LED_COLOR_OFF);
     POWER_disable(POWER_REQUESTER_ID_RF_API, POWER_DOMAIN_RADIO);
     SIGFOX_RETURN();
 }
@@ -610,7 +624,7 @@ void RF_API_error(void) {
     // Force all front-end off.
     SX126X_reset(1);
     RFE_set_path(RFE_PATH_NONE);
-    LED_set_color(LED_COLOR_OFF);
+    LED_set_activity(LED_ACTIVITY_NONE);
     POWER_disable(POWER_REQUESTER_ID_RF_API, POWER_DOMAIN_TCXO);
     POWER_disable(POWER_REQUESTER_ID_RF_API, POWER_DOMAIN_RADIO);
 }

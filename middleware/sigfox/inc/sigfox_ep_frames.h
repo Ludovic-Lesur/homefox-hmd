@@ -107,6 +107,7 @@ typedef enum {
     SIGFOX_EP_DL_OP_CODE_NOP = 0,
     SIGFOX_EP_DL_OP_CODE_RESET,
     SIGFOX_EP_DL_OP_CODE_SET_TIMINGS,
+    SIGFOX_EP_DL_OP_CODE_SET_LED_COLOR,
     SIGFOX_EP_DL_OP_CODE_LAST
 } SIGFOX_EP_dl_op_code_t;
 
@@ -125,6 +126,16 @@ typedef union {
                 unsigned accelerometer_blanking_time_seconds :16;
                 unsigned unused: 8;
             } __attribute__((scalar_storage_order("big-endian"))) __attribute__((packed)) set_timings;
+        };
+        union {
+            struct {
+                unsigned temperature_humidity_reading :8;
+                unsigned sigfox_uplink :8;
+                unsigned sigfox_downlink :8;
+                unsigned air_quality_reading :8;
+                unsigned accelerometer_reading :8;
+                unsigned unused :16;
+            } __attribute__((scalar_storage_order("big-endian"))) __attribute__((packed)) set_led_color;
         };
     } __attribute__((scalar_storage_order("big-endian"))) __attribute__((packed));
 } SIGFOX_EP_dl_payload_t;

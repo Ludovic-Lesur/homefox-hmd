@@ -123,6 +123,15 @@ typedef struct {
 
 /*******************************************************************/
 typedef struct {
+    LED_color_t temperature_humidity_reading;
+    LED_color_t air_quality_reading;
+    LED_color_t accelerometer_reading;
+    LED_color_t sigfox_uplink;
+    LED_color_t sigfox_downlink;
+} HMD_led_color_t;
+
+/*******************************************************************/
+typedef struct {
     int32_t threshold_mv;
     LED_color_t led_color;
 } HMD_vbatt_indicator_t;
@@ -141,6 +150,7 @@ typedef struct {
     // Downlink.
     uint32_t downlink_last_time_seconds;
     HMD_timings_t timings;
+    HMD_led_color_t led_color;
     // Error stack.
     uint32_t error_stack_last_time_seconds;
 #ifdef HMD_AIR_QUALITY_ENABLE
@@ -292,6 +302,153 @@ static void _HMD_store_timings(HMD_timings_t* timings) {
 
 #ifndef HMD_MODE_CLI
 /*******************************************************************/
+static void _HMD_load_led_color(void) {
+    // Local variables.
+    NVM_status_t nvm_status = NVM_SUCCESS;
+    uint8_t nvm_byte = 0;
+    // Read temperature and humidity reading color.
+    nvm_status = NVM_read_byte(NVM_ADDRESS_LED_COLOR_TEMPERATURE_HUMIDITY_READING, &nvm_byte);
+    NVM_stack_error(ERROR_BASE_NVM);
+    // Check value.
+    if (nvm_byte >= LED_COLOR_LAST) {
+        // Reset to default value.
+        nvm_byte = LED_COLOR_GREEN;
+    }
+    hmd_ctx.led_color.temperature_humidity_reading = ((LED_color_t) nvm_byte);
+    // Read Sigfox uplink color.
+    nvm_status = NVM_read_byte(NVM_ADDRESS_LED_COLOR_SIGFOX_UPLINK, &nvm_byte);
+    NVM_stack_error(ERROR_BASE_NVM);
+    // Check value.
+    if (nvm_byte >= LED_COLOR_LAST) {
+        // Reset to default value.
+        nvm_byte = LED_COLOR_BLUE;
+    }
+    hmd_ctx.led_color.sigfox_uplink = ((LED_color_t) nvm_byte);
+    // Read Sigfox downlink color.
+    nvm_status = NVM_read_byte(NVM_ADDRESS_LED_COLOR_SIGFOX_DOWNLINK, &nvm_byte);
+    NVM_stack_error(ERROR_BASE_NVM);
+    // Check value.
+    if (nvm_byte >= LED_COLOR_LAST) {
+       // Reset to default value.
+       nvm_byte = LED_COLOR_CYAN;
+    }
+    hmd_ctx.led_color.sigfox_downlink = ((LED_color_t) nvm_byte);
+#ifdef HMD_AIR_QUALITY_ENABLE
+    // Read air quality reading color.
+    nvm_status = NVM_read_byte(NVM_ADDRESS_LED_COLOR_AIR_QUALITY_READING, &nvm_byte);
+    NVM_stack_error(ERROR_BASE_NVM);
+    // Check value.
+    if (nvm_byte >= LED_COLOR_LAST) {
+        // Reset to default value.
+        nvm_byte = LED_COLOR_YELLOW;
+    }
+    hmd_ctx.led_color.air_quality_reading = ((LED_color_t) nvm_byte);
+#endif
+#ifdef HMD_ACCELEROMETER_ENABLE
+    // Read accelerometer reading color.
+    nvm_status = NVM_read_byte(NVM_ADDRESS_LED_COLOR_ACCELEROMETER_READING, &nvm_byte);
+    NVM_stack_error(ERROR_BASE_NVM);
+    // Check value.
+    if (nvm_byte >= LED_COLOR_LAST) {
+        // Reset to default value.
+        nvm_byte = LED_COLOR_MAGENTA;
+    }
+    hmd_ctx.led_color.accelerometer_reading = ((LED_color_t) nvm_byte);
+#endif
+}
+#endif
+
+#ifndef HMD_MODE_CLI
+/*******************************************************************/
+static void _HMD_store_led_color(HMD_led_color_t* led_color) {
+    // Local variables.
+    NVM_status_t nvm_status = NVM_SUCCESS;
+    LED_status_t led_status = LED_SUCCESS;
+    LED_color_t color = LED_COLOR_OFF;
+    // Temperature and humidity reading.
+    color = (led_color->temperature_humidity_reading);
+    if (color < LED_COLOR_LAST) {
+        // Update context.
+        hmd_ctx.led_color.temperature_humidity_reading = color;
+        // Update driver.
+        led_status = LED_set_activity_color(LED_ACTIVITY_TEMPERATURE_HUMIDITY_READING, color);
+        LED_stack_error(ERROR_BASE_LED);
+        // Write new value in NVM.
+        nvm_status = NVM_write_byte(NVM_ADDRESS_LED_COLOR_TEMPERATURE_HUMIDITY_READING, ((uint8_t) color));
+        NVM_stack_error(ERROR_BASE_NVM);
+    }
+    else {
+        ERROR_stack_add(ERROR_SIGFOX_EP_DL_TEMPERATURE_HUMIDITY_READING_COLOR);
+    }
+    // Sigfox uplink.
+    color = (led_color->sigfox_uplink);
+    if (color < LED_COLOR_LAST) {
+        // Update context.
+        hmd_ctx.led_color.sigfox_uplink = color;
+        // Update driver.
+        led_status = LED_set_activity_color(LED_ACTIVITY_SIGFOX_UPLINK, color);
+        LED_stack_error(ERROR_BASE_LED);
+        // Write new value in NVM.
+        nvm_status = NVM_write_byte(NVM_ADDRESS_LED_COLOR_SIGFOX_UPLINK, ((uint8_t) color));
+        NVM_stack_error(ERROR_BASE_NVM);
+    }
+    else {
+        ERROR_stack_add(ERROR_SIGFOX_EP_DL_SIGFOX_UPLINK_COLOR);
+    }
+    // Sigfox downlink.
+    color = (led_color->sigfox_downlink);
+    if (color < LED_COLOR_LAST) {
+        // Update context.
+        hmd_ctx.led_color.sigfox_downlink = color;
+        // Update driver.
+        led_status = LED_set_activity_color(LED_ACTIVITY_SIGFOX_DOWNLINK, color);
+        LED_stack_error(ERROR_BASE_LED);
+        // Write new value in NVM.
+        nvm_status = NVM_write_byte(NVM_ADDRESS_LED_COLOR_SIGFOX_DOWNLINK, ((uint8_t) color));
+        NVM_stack_error(ERROR_BASE_NVM);
+    }
+    else {
+        ERROR_stack_add(ERROR_SIGFOX_EP_DL_SIGFOX_DOWNLINK_COLOR);
+    }
+#ifdef HMD_AIR_QUALITY_ENABLE
+    // Air quality reading.
+    color = (led_color->air_quality_reading);
+    if (color < LED_COLOR_LAST) {
+        // Update context.
+        hmd_ctx.led_color.air_quality_reading = color;
+        // Update driver.
+        led_status = LED_set_activity_color(LED_ACTIVITY_AIR_QUALITY_READING, color);
+        LED_stack_error(ERROR_BASE_LED);
+        // Write new value in NVM.
+        nvm_status = NVM_write_byte(NVM_ADDRESS_LED_COLOR_AIR_QUALITY_READING, ((uint8_t) color));
+        NVM_stack_error(ERROR_BASE_NVM);
+    }
+    else {
+        ERROR_stack_add(ERROR_SIGFOX_EP_DL_AIR_QUALITY_READING_COLOR);
+    }
+#endif
+#ifdef HMD_ACCELEROMETER_ENABLE
+    // Accelerometer reading
+    color = (led_color->accelerometer_reading);
+    if (color < LED_COLOR_LAST) {
+        // Update context.
+        hmd_ctx.led_color.accelerometer_reading = color;
+        // Update driver.
+        led_status = LED_set_activity_color(LED_ACTIVITY_ACCELEROMETER_READING, color);
+        LED_stack_error(ERROR_BASE_LED);
+        // Write new value in NVM.
+        nvm_status = NVM_write_byte(NVM_ADDRESS_LED_COLOR_ACCELEROMETER_READING, ((uint8_t) color));
+        NVM_stack_error(ERROR_BASE_NVM);
+    }
+    else {
+        ERROR_stack_add(ERROR_SIGFOX_EP_DL_ACCELEROMETER_READING_COLOR);
+    }
+#endif
+}
+#endif
+
+#ifndef HMD_MODE_CLI
+/*******************************************************************/
 static void _HMD_init_context(void) {
     // Init context.
     hmd_ctx.state = HMD_STATE_STARTUP;
@@ -323,7 +480,9 @@ static void _HMD_init_context(void) {
 #endif
     // Load configuration from NVM.
     _HMD_load_timings();
+    _HMD_load_led_color();
     _HMD_store_timings(&hmd_ctx.timings);
+    _HMD_store_led_color(&hmd_ctx.led_color);
 }
 #endif
 
@@ -431,7 +590,7 @@ static void _HMD_update_temperature_humidity(void) {
     hmd_ctx.hamb_percent = SIGFOX_EP_ERROR_VALUE_HUMIDITY;
 #if ((defined HMD_TEMPERATURE_HUMIDITY_SHT3X_ENABLE) || (defined HMD_TEMPERATURE_HUMIDITY_ENS21X_ENABLE))
     // Turn sensors on.
-    LED_set_color(LED_COLOR_GREEN);
+    LED_set_activity(LED_ACTIVITY_TEMPERATURE_HUMIDITY_READING);
     POWER_enable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_STOP);
 #endif
 #ifdef HMD_TEMPERATURE_HUMIDITY_ENS21X_ENABLE
@@ -469,7 +628,7 @@ static void _HMD_update_temperature_humidity(void) {
 #if ((defined HMD_TEMPERATURE_HUMIDITY_SHT3X_ENABLE) || (defined HMD_TEMPERATURE_HUMIDITY_ENS21X_ENABLE))
     // Turn sensors off.
     POWER_disable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS);
-    LED_set_color(LED_COLOR_OFF);
+    LED_set_activity(LED_ACTIVITY_NONE);
 #endif
 }
 #endif
@@ -503,12 +662,12 @@ static void _HMD_update_air_quality(void) {
         do {
             // Reload watchdog.
             IWDG_reload();
-            LED_set_color(LED_COLOR_OFF);
+            LED_set_activity(LED_ACTIVITY_NONE);
             // Low power acquisition delay.
             lptim_status = LPTIM_delay_milliseconds((HMD_AIR_QUALITY_ACQUISITION_DELAY_MS - HMD_AIR_QUALITY_ACQUISITION_LED_BLINK_MS), LPTIM_DELAY_MODE_STOP);
             LPTIM_stack_error(ERROR_BASE_LPTIM);
             // Blink yellow LED.
-            LED_set_color(LED_COLOR_YELLOW);
+            LED_set_activity(LED_ACTIVITY_AIR_QUALITY_READING);
             // LED delay.
             lptim_status = LPTIM_delay_milliseconds(HMD_AIR_QUALITY_ACQUISITION_LED_BLINK_MS, LPTIM_DELAY_MODE_SLEEP);
             LPTIM_stack_error(ERROR_BASE_LPTIM);
@@ -545,7 +704,7 @@ static void _HMD_update_air_quality(void) {
         ENS16X_stack_error(ERROR_BASE_ENS16X);
         // Turn sensors off.
         POWER_disable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS);
-        LED_set_color(LED_COLOR_OFF);
+        LED_set_activity(LED_ACTIVITY_NONE);
     }
 errors:
     return;
@@ -561,6 +720,7 @@ static void _HMD_send_sigfox_message(SIGFOX_EP_API_application_message_t* sigfox
     SIGFOX_EP_API_message_status_t message_status;
     SIGFOX_EP_dl_payload_t dl_payload;
     HMD_timings_t timings;
+    HMD_led_color_t led_color;
     int16_t dl_rssi = 0;
     uint8_t status = 0;
     // Directly exit of the radio is disabled due to low battery voltage.
@@ -606,6 +766,16 @@ static void _HMD_send_sigfox_message(SIGFOX_EP_API_application_message_t* sigfox
                     timings.accelerometer_blanking_time_seconds = dl_payload.set_timings.accelerometer_blanking_time_seconds;
                     // Check and store new configuration.
                     _HMD_store_timings(&timings);
+                    break;
+                case SIGFOX_EP_DL_OP_CODE_SET_LED_COLOR:
+                    // Build LED configuration structure.
+                    led_color.temperature_humidity_reading = dl_payload.set_led_color.temperature_humidity_reading;
+                    led_color.sigfox_uplink = dl_payload.set_led_color.sigfox_uplink;
+                    led_color.sigfox_downlink = dl_payload.set_led_color.sigfox_downlink;
+                    led_color.air_quality_reading = dl_payload.set_led_color.air_quality_reading;
+                    led_color.accelerometer_reading = dl_payload.set_led_color.accelerometer_reading;
+                    // Check and store new configuration.
+                    _HMD_store_led_color(&led_color);
                     break;
                 default:
                     ERROR_stack_add(ERROR_SIGFOX_EP_DL_OP_CODE);
@@ -783,7 +953,7 @@ int main(void) {
             // Disable interrupt on MCU side.
             SENSORS_HW_disable_sensor_interrupt();
             // Turn sensors on.
-            LED_set_color(LED_COLOR_MAGENTA);
+            LED_set_activity(LED_ACTIVITY_ACCELEROMETER_READING);
             POWER_enable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_STOP);
             // Disable accelerometer.
             fxls89xxxx_status = FXLS89XXXX_write_configuration(I2C_ADDRESS_FXLS8974CF, FXLS89XXXX_SLEEP_CONFIGURATION, FXLS89XXXX_SLEEP_CONFIGURATION_SIZE);
@@ -793,7 +963,7 @@ int main(void) {
             FXLS89XXXX_stack_error(ERROR_BASE_FXLS8974CF);
             // Turn sensors off.
             POWER_disable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS);
-            LED_set_color(LED_COLOR_OFF);
+            LED_set_activity(LED_ACTIVITY_NONE);
             // Check status.
             sigfox_ul_payload_accelerometer.event_source = ((fxls89xxxx_status == FXLS89XXXX_SUCCESS) ? (fxls89xxxx_int_src1.all) : 0);
             // Send uplink air quality frame.
@@ -863,14 +1033,14 @@ int main(void) {
             // Check accelerometer blanking time.
             if ((generic_u32 >= (hmd_ctx.accelerometer_last_time_seconds + hmd_ctx.timings.accelerometer_blanking_time_seconds)) && (hmd_ctx.accelerometer_state == 0)) {
                 // Turn sensors on.
-                LED_set_color(LED_COLOR_MAGENTA);
+                LED_set_activity(LED_ACTIVITY_ACCELEROMETER_READING);
                 POWER_enable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_STOP);
                 // Enable accelerometer.
                 fxls89xxxx_status = FXLS89XXXX_write_configuration(I2C_ADDRESS_FXLS8974CF, FXLS89XXXX_ACTIVE_CONFIGURATION, FXLS89XXXX_ACTIVE_CONFIGURATION_SIZE);
                 FXLS89XXXX_stack_error(ERROR_BASE_FXLS8974CF);
                 // Turn sensors off.
                 POWER_disable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS);
-                LED_set_color(LED_COLOR_OFF);
+                LED_set_activity(LED_ACTIVITY_NONE);
                 // Enable interrupt on MCU side.
                 SENSORS_HW_enable_sensor_interrupt();
                 // Update state.

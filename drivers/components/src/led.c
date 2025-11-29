@@ -16,14 +16,13 @@
 /*** LED local structures ***/
 
 /*******************************************************************/
-typedef enum {
-    LED_COLOR_INDEX_RED = 0,
-    LED_COLOR_INDEX_GREEN,
-    LED_COLOR_INDEX_BLUE,
-    LED_COLOR_INDEX_LAST
-} LED_color_index_t;
+typedef struct {
+    LED_color_t activity_color[LED_ACTIVITY_LAST];
+} LED_context_t;
 
 /*** LED local global variables ***/
+
+static LED_context_t led_ctx;
 
 /*** LED functions ***/
 
@@ -31,6 +30,11 @@ typedef enum {
 LED_status_t LED_init(void) {
     // Local variables.
     LED_status_t status = LED_SUCCESS;
+    uint8_t idx = 0;
+    // Init context.
+    for (idx = 0; idx < LED_ACTIVITY_LAST; idx++) {
+        led_ctx.activity_color[idx] = LED_COLOR_OFF;
+    }
     // Configure LED pins.
     GPIO_configure(&GPIO_LED_RED, GPIO_MODE_OUTPUT, GPIO_TYPE_PUSH_PULL, GPIO_SPEED_LOW, GPIO_PULL_NONE);
     GPIO_configure(&GPIO_LED_GREEN, GPIO_MODE_OUTPUT, GPIO_TYPE_PUSH_PULL, GPIO_SPEED_LOW, GPIO_PULL_NONE);
@@ -94,6 +98,38 @@ LED_status_t LED_set_color(LED_color_t led_color) {
     GPIO_write(&GPIO_LED_RED, red);
     GPIO_write(&GPIO_LED_GREEN, green);
     GPIO_write(&GPIO_LED_BLUE, blue);
+errors:
+    return status;
+}
+
+/*******************************************************************/
+LED_status_t LED_set_activity_color(LED_activity_t led_activity, LED_color_t led_color) {
+    // Local variables.
+    LED_status_t status = LED_SUCCESS;
+    // Check parameters.
+    if ((led_activity == LED_ACTIVITY_NONE) || (led_activity >= LED_ACTIVITY_LAST)) {
+        status = LED_ERROR_ACTIVITY;
+        goto errors;
+    }
+    if (led_color >= LED_COLOR_LAST) {
+        status = LED_ERROR_COLOR;
+        goto errors;
+    }
+    led_ctx.activity_color[led_activity] = led_color;
+errors:
+    return status;
+}
+
+/*******************************************************************/
+LED_status_t LED_set_activity(LED_activity_t led_activity) {
+    // Local variables.
+    LED_status_t status = LED_SUCCESS;
+    // Check parameter.
+    if (led_activity >= LED_ACTIVITY_LAST) {
+        status = LED_ERROR_ACTIVITY;
+        goto errors;
+    }
+    status = LED_set_color(led_ctx.activity_color[led_activity]);
 errors:
     return status;
 }
