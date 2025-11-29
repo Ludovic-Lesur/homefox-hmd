@@ -129,9 +129,9 @@ typedef union {
         };
         union {
             struct {
-                unsigned temperature_humidity_reading :8;
                 unsigned sigfox_uplink :8;
                 unsigned sigfox_downlink :8;
+                unsigned temperature_humidity_reading :8;
                 unsigned air_quality_reading :8;
                 unsigned accelerometer_reading :8;
                 unsigned unused :16;

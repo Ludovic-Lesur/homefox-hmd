@@ -49,9 +49,9 @@ typedef enum {
  *******************************************************************/
 typedef enum {
     LED_ACTIVITY_NONE = 0,
-    LED_ACTIVITY_TEMPERATURE_HUMIDITY_READING,
     LED_ACTIVITY_SIGFOX_UPLINK,
     LED_ACTIVITY_SIGFOX_DOWNLINK,
+    LED_ACTIVITY_TEMPERATURE_HUMIDITY_READING,
 #ifdef HMD_AIR_QUALITY_ENABLE
     LED_ACTIVITY_AIR_QUALITY_READING,
 #endif

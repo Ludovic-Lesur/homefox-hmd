@@ -306,15 +306,6 @@ static void _HMD_load_led_color(void) {
     // Local variables.
     NVM_status_t nvm_status = NVM_SUCCESS;
     uint8_t nvm_byte = 0;
-    // Read temperature and humidity reading color.
-    nvm_status = NVM_read_byte(NVM_ADDRESS_LED_COLOR_TEMPERATURE_HUMIDITY_READING, &nvm_byte);
-    NVM_stack_error(ERROR_BASE_NVM);
-    // Check value.
-    if (nvm_byte >= LED_COLOR_LAST) {
-        // Reset to default value.
-        nvm_byte = LED_COLOR_GREEN;
-    }
-    hmd_ctx.led_color.temperature_humidity_reading = ((LED_color_t) nvm_byte);
     // Read Sigfox uplink color.
     nvm_status = NVM_read_byte(NVM_ADDRESS_LED_COLOR_SIGFOX_UPLINK, &nvm_byte);
     NVM_stack_error(ERROR_BASE_NVM);
@@ -333,6 +324,15 @@ static void _HMD_load_led_color(void) {
        nvm_byte = LED_COLOR_CYAN;
     }
     hmd_ctx.led_color.sigfox_downlink = ((LED_color_t) nvm_byte);
+    // Read temperature and humidity reading color.
+    nvm_status = NVM_read_byte(NVM_ADDRESS_LED_COLOR_TEMPERATURE_HUMIDITY_READING, &nvm_byte);
+    NVM_stack_error(ERROR_BASE_NVM);
+    // Check value.
+    if (nvm_byte >= LED_COLOR_LAST) {
+        // Reset to default value.
+        nvm_byte = LED_COLOR_GREEN;
+    }
+    hmd_ctx.led_color.temperature_humidity_reading = ((LED_color_t) nvm_byte);
 #ifdef HMD_AIR_QUALITY_ENABLE
     // Read air quality reading color.
     nvm_status = NVM_read_byte(NVM_ADDRESS_LED_COLOR_AIR_QUALITY_READING, &nvm_byte);
@@ -365,21 +365,6 @@ static void _HMD_store_led_color(HMD_led_color_t* led_color) {
     NVM_status_t nvm_status = NVM_SUCCESS;
     LED_status_t led_status = LED_SUCCESS;
     LED_color_t color = LED_COLOR_OFF;
-    // Temperature and humidity reading.
-    color = (led_color->temperature_humidity_reading);
-    if (color < LED_COLOR_LAST) {
-        // Update context.
-        hmd_ctx.led_color.temperature_humidity_reading = color;
-        // Update driver.
-        led_status = LED_set_activity_color(LED_ACTIVITY_TEMPERATURE_HUMIDITY_READING, color);
-        LED_stack_error(ERROR_BASE_LED);
-        // Write new value in NVM.
-        nvm_status = NVM_write_byte(NVM_ADDRESS_LED_COLOR_TEMPERATURE_HUMIDITY_READING, ((uint8_t) color));
-        NVM_stack_error(ERROR_BASE_NVM);
-    }
-    else {
-        ERROR_stack_add(ERROR_SIGFOX_EP_DL_TEMPERATURE_HUMIDITY_READING_COLOR);
-    }
     // Sigfox uplink.
     color = (led_color->sigfox_uplink);
     if (color < LED_COLOR_LAST) {
@@ -409,6 +394,21 @@ static void _HMD_store_led_color(HMD_led_color_t* led_color) {
     }
     else {
         ERROR_stack_add(ERROR_SIGFOX_EP_DL_SIGFOX_DOWNLINK_COLOR);
+    }
+    // Temperature and humidity reading.
+    color = (led_color->temperature_humidity_reading);
+    if (color < LED_COLOR_LAST) {
+        // Update context.
+        hmd_ctx.led_color.temperature_humidity_reading = color;
+        // Update driver.
+        led_status = LED_set_activity_color(LED_ACTIVITY_TEMPERATURE_HUMIDITY_READING, color);
+        LED_stack_error(ERROR_BASE_LED);
+        // Write new value in NVM.
+        nvm_status = NVM_write_byte(NVM_ADDRESS_LED_COLOR_TEMPERATURE_HUMIDITY_READING, ((uint8_t) color));
+        NVM_stack_error(ERROR_BASE_NVM);
+    }
+    else {
+        ERROR_stack_add(ERROR_SIGFOX_EP_DL_TEMPERATURE_HUMIDITY_READING_COLOR);
     }
 #ifdef HMD_AIR_QUALITY_ENABLE
     // Air quality reading.
@@ -769,9 +769,9 @@ static void _HMD_send_sigfox_message(SIGFOX_EP_API_application_message_t* sigfox
                     break;
                 case SIGFOX_EP_DL_OP_CODE_SET_LED_COLOR:
                     // Build LED configuration structure.
-                    led_color.temperature_humidity_reading = dl_payload.set_led_color.temperature_humidity_reading;
                     led_color.sigfox_uplink = dl_payload.set_led_color.sigfox_uplink;
                     led_color.sigfox_downlink = dl_payload.set_led_color.sigfox_downlink;
+                    led_color.temperature_humidity_reading = dl_payload.set_led_color.temperature_humidity_reading;
                     led_color.air_quality_reading = dl_payload.set_led_color.air_quality_reading;
                     led_color.accelerometer_reading = dl_payload.set_led_color.accelerometer_reading;
                     // Check and store new configuration.
