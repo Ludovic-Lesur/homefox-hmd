@@ -674,27 +674,27 @@ static void _HMD_update_air_quality(void) {
             LPTIM_stack_error(ERROR_BASE_LPTIM);
             // Update duration.
             hmd_ctx.air_quality_acquisition_time_ms += HMD_AIR_QUALITY_ACQUISITION_DELAY_MS;
-            // Check minimum time.
-            if (hmd_ctx.air_quality_acquisition_time_ms >= HMD_AIR_QUALITY_ACQUISITION_TIME_MIN_MS) {
-                // Read device status.
-                ens16x_status = ENS16X_get_device_status(I2C_ADDRESS_ENS16X, &hmd_ctx.air_quality_acquisition_status);
+            // Read device status.
+            ens16x_status = ENS16X_get_device_status(I2C_ADDRESS_ENS16X, &hmd_ctx.air_quality_acquisition_status);
+            ENS16X_stack_error(ERROR_BASE_ENS16X);
+            // Check status.
+            if (ens16x_status != ENS16X_SUCCESS) break;
+            // Check data validity.
+            if (hmd_ctx.air_quality_acquisition_status.newdat != 0) {
+                // Read data.
+                ens16x_status = ENS16X_read_air_quality(I2C_ADDRESS_ENS16X, &air_quality_data);
                 ENS16X_stack_error(ERROR_BASE_ENS16X);
                 // Check status.
                 if (ens16x_status != ENS16X_SUCCESS) break;
-                // Check data validity.
-                if (hmd_ctx.air_quality_acquisition_status.validity_flag == ENS16X_VALIDITY_FLAG_NORMAL_OPERATION) {
-                    // Read data.
-                    ens16x_status = ENS16X_read_air_quality(I2C_ADDRESS_ENS16X, &air_quality_data);
-                    ENS16X_stack_error(ERROR_BASE_ENS16X);
-                    // Check status.
-                    if (ens16x_status == ENS16X_SUCCESS) {
-                        hmd_ctx.air_quality_data.tvoc_ppb = (air_quality_data.tvoc_ppb);
-                        hmd_ctx.air_quality_data.eco2_ppm = (air_quality_data.eco2_ppm);
-                        hmd_ctx.air_quality_data.aqi_uba = (air_quality_data.aqi_uba);
+                // Check validity flag and minimum time.
+                if ((hmd_ctx.air_quality_acquisition_status.validity_flag == ENS16X_VALIDITY_FLAG_NORMAL_OPERATION) && (hmd_ctx.air_quality_acquisition_time_ms >= HMD_AIR_QUALITY_ACQUISITION_TIME_MIN_MS)) {
+                    // Update data.
+                    hmd_ctx.air_quality_data.tvoc_ppb = (air_quality_data.tvoc_ppb);
+                    hmd_ctx.air_quality_data.eco2_ppm = (air_quality_data.eco2_ppm);
+                    hmd_ctx.air_quality_data.aqi_uba = (air_quality_data.aqi_uba);
 #ifdef ENS16X_DRIVER_DEVICE_ENS161
-                        hmd_ctx.air_quality_data.aqi_s = (air_quality_data.aqi_s);
+                    hmd_ctx.air_quality_data.aqi_s = (air_quality_data.aqi_s);
 #endif
-                    }
                     break;
                 }
             }
