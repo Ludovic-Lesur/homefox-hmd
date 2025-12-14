@@ -62,9 +62,9 @@
 #define HMD_AIR_QUALITY_ACQUISITION_TIME_MIN_MS             120000
 #define HMD_AIR_QUALITY_ACQUISITION_TIME_MAX_MS             360000
 #ifdef ENS16X_DRIVER_DEVICE_ENS161
-#define HMD_AIR_QUALITY_ACQUISITION_MODE                    ENS16X_SENSING_MODE_LOW_POWER
+#define HMD_AIR_QUALITY_ACQUISITION_MODE                    ENS16X_OPERATING_MODE_LOW_POWER
 #else
-#define HMD_AIR_QUALITY_ACQUISITION_MODE                    ENS16X_SENSING_MODE_STANDARD
+#define HMD_AIR_QUALITY_ACQUISITION_MODE                    ENS16X_OPERATING_MODE_STANDARD
 #endif
 // Accelerometer.
 #define HMD_ACCELEROMETER_BLANKING_TIME_SECONDS_DEFAULT     60
@@ -654,8 +654,11 @@ static void _HMD_update_air_quality(void) {
     if ((hmd_ctx.tamb_tenth_degrees == SIGFOX_EP_ERROR_VALUE_TEMPERATURE) || (hmd_ctx.hamb_percent == SIGFOX_EP_ERROR_VALUE_HUMIDITY)) goto errors;
     // Turn sensors on.
     POWER_enable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_STOP);
+    // Set RHT compensation.
+    ens16x_status = ENS16X_set_temperature_humidity(I2C_ADDRESS_ENS16X, hmd_ctx.tamb_tenth_degrees, hmd_ctx.hamb_percent);
+    ENS16X_stack_error(ERROR_BASE_ENS16X);
     // Start acquisition.
-    ens16x_status = ENS16X_start_acquisition(I2C_ADDRESS_ENS16X, HMD_AIR_QUALITY_ACQUISITION_MODE, hmd_ctx.tamb_tenth_degrees, hmd_ctx.hamb_percent);
+    ens16x_status = ENS16X_set_operating_mode(I2C_ADDRESS_ENS16X, HMD_AIR_QUALITY_ACQUISITION_MODE);
     ENS16X_stack_error(ERROR_BASE_ENS16X);
     // Directly exit in case of error.
     if (ens16x_status == ENS16X_SUCCESS) {
@@ -700,9 +703,6 @@ static void _HMD_update_air_quality(void) {
             }
         }
         while (hmd_ctx.air_quality_acquisition_time_ms < HMD_AIR_QUALITY_ACQUISITION_TIME_MAX_MS);
-        // Stop acquisition.
-        ens16x_status = ENS16X_stop_acquisition(I2C_ADDRESS_ENS16X);
-        ENS16X_stack_error(ERROR_BASE_ENS16X);
         // Turn sensors off.
         POWER_disable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS);
         LED_set_activity(LED_ACTIVITY_NONE);
