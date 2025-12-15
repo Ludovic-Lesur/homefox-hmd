@@ -655,6 +655,8 @@ static void _HMD_update_air_quality(void) {
     // Turn sensors on.
     POWER_enable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_STOP);
     // Set RHT compensation.
+    ens16x_status = ENS16X_set_operating_mode(I2C_ADDRESS_ENS16X, ENS16X_OPERATING_MODE_IDLE);
+    ENS16X_stack_error(ERROR_BASE_ENS16X);
     ens16x_status = ENS16X_set_temperature_humidity(I2C_ADDRESS_ENS16X, hmd_ctx.tamb_tenth_degrees, hmd_ctx.hamb_percent);
     ENS16X_stack_error(ERROR_BASE_ENS16X);
     // Start acquisition.
