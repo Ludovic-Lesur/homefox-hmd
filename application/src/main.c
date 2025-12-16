@@ -634,13 +634,15 @@ static void _HMD_update_temperature_humidity(void) {
 }
 #endif
 
-#if (!(defined HMD_MODE_CLI) & (defined HMD_AIR_QUALITY_ENABLE))
+#if (!(defined HMD_MODE_CLI) && (defined HMD_AIR_QUALITY_ENABLE))
 /*******************************************************************/
 static void _HMD_update_air_quality(void) {
     // Local variables.
     ENS16X_status_t ens16x_status = ENS16X_SUCCESS;
     LPTIM_status_t lptim_status = LPTIM_SUCCESS;
     ENS16X_air_quality_data_t air_quality_data;
+    int32_t tamb_tenth_degrees = ((hmd_ctx.tamb_tenth_degrees != SIGFOX_EP_ERROR_VALUE_TEMPERATURE) ? hmd_ctx.tamb_tenth_degrees : 25);;
+    int32_t hamb_percent = ((hmd_ctx.hamb_percent != SIGFOX_EP_ERROR_VALUE_HUMIDITY) ? hmd_ctx.hamb_percent : 50);
     // Reset data.
     hmd_ctx.air_quality_acquisition_time_ms = 0;
     hmd_ctx.air_quality_acquisition_status.validity_flag = ENS16X_VALIDITY_FLAG_INVALID_OUTPUT;
@@ -650,17 +652,21 @@ static void _HMD_update_air_quality(void) {
 #ifdef ENS16X_DRIVER_DEVICE_ENS161
     hmd_ctx.air_quality_data.aqi_s = SIGFOX_EP_ERROR_VALUE_AQI_S;
 #endif
-    // Check if temperature and humidity are available.
-    if ((hmd_ctx.tamb_tenth_degrees == SIGFOX_EP_ERROR_VALUE_TEMPERATURE) || (hmd_ctx.hamb_percent == SIGFOX_EP_ERROR_VALUE_HUMIDITY)) goto errors;
     // Turn sensors on.
     POWER_enable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_STOP);
+    // Read device status.
+    ens16x_status = ENS16X_get_device_status(I2C_ADDRESS_ENS16X, &hmd_ctx.air_quality_acquisition_status);
+    ENS16X_stack_error(ERROR_BASE_ENS16X);
+    // Check if sensor is running.
+    if (hmd_ctx.air_quality_acquisition_status.statas == 0) {
+        // Start acquisition.
+        ens16x_status = ENS16X_set_operating_mode(I2C_ADDRESS_ENS16X, ENS16X_OPERATING_MODE_IDLE);
+        ENS16X_stack_error(ERROR_BASE_ENS16X);
+        ens16x_status = ENS16X_set_operating_mode(I2C_ADDRESS_ENS16X, HMD_AIR_QUALITY_ACQUISITION_MODE);
+        ENS16X_stack_error(ERROR_BASE_ENS16X);
+    }
     // Set RHT compensation.
-    ens16x_status = ENS16X_set_operating_mode(I2C_ADDRESS_ENS16X, ENS16X_OPERATING_MODE_IDLE);
-    ENS16X_stack_error(ERROR_BASE_ENS16X);
-    ens16x_status = ENS16X_set_temperature_humidity(I2C_ADDRESS_ENS16X, hmd_ctx.tamb_tenth_degrees, hmd_ctx.hamb_percent);
-    ENS16X_stack_error(ERROR_BASE_ENS16X);
-    // Start acquisition.
-    ens16x_status = ENS16X_set_operating_mode(I2C_ADDRESS_ENS16X, HMD_AIR_QUALITY_ACQUISITION_MODE);
+    ens16x_status = ENS16X_set_temperature_humidity(I2C_ADDRESS_ENS16X, tamb_tenth_degrees, hamb_percent);
     ENS16X_stack_error(ERROR_BASE_ENS16X);
     // Directly exit in case of error.
     if (ens16x_status == ENS16X_SUCCESS) {
@@ -675,7 +681,7 @@ static void _HMD_update_air_quality(void) {
             // Blink yellow LED.
             LED_set_activity(LED_ACTIVITY_AIR_QUALITY_READING);
             // LED delay.
-            lptim_status = LPTIM_delay_milliseconds(HMD_AIR_QUALITY_ACQUISITION_LED_BLINK_MS, LPTIM_DELAY_MODE_SLEEP);
+            lptim_status = LPTIM_delay_milliseconds(HMD_AIR_QUALITY_ACQUISITION_LED_BLINK_MS, LPTIM_DELAY_MODE_STOP);
             LPTIM_stack_error(ERROR_BASE_LPTIM);
             // Update duration.
             hmd_ctx.air_quality_acquisition_time_ms += HMD_AIR_QUALITY_ACQUISITION_DELAY_MS;
@@ -709,8 +715,6 @@ static void _HMD_update_air_quality(void) {
         POWER_disable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS);
         LED_set_activity(LED_ACTIVITY_NONE);
     }
-errors:
-    return;
 }
 #endif
 
