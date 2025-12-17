@@ -549,8 +549,6 @@ static void _HMD_update_battery_voltage(void) {
     int32_t vbatt = 0;
     // Reset data.
     hmd_ctx.vbatt_mv = SIGFOX_EP_ERROR_VALUE_ANALOG_16BITS;
-    // Turn ADC on.
-    POWER_enable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_ANALOG, LPTIM_DELAY_MODE_ACTIVE);
     // Perform battery voltage measurement.
     analog_status = ANALOG_convert_channel(ANALOG_CHANNEL_VBATT_MV, &vbatt);
     ANALOG_stack_error(ERROR_BASE_ANALOG);
@@ -565,8 +563,6 @@ static void _HMD_update_battery_voltage(void) {
         // Update data.
         hmd_ctx.vbatt_mv = (uint16_t) vbatt;
     }
-    // Turn ADC off.
-    POWER_disable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_ANALOG);
 }
 #endif
 
@@ -590,9 +586,8 @@ static void _HMD_update_temperature_humidity(void) {
     hmd_ctx.tamb_tenth_degrees = SIGFOX_EP_ERROR_VALUE_TEMPERATURE;
     hmd_ctx.hamb_percent = SIGFOX_EP_ERROR_VALUE_HUMIDITY;
 #if ((defined HMD_TEMPERATURE_HUMIDITY_SHT3X_ENABLE) || (defined HMD_TEMPERATURE_HUMIDITY_ENS21X_ENABLE))
-    // Turn sensors on.
+    // Turn LED on.
     LED_set_activity(LED_ACTIVITY_TEMPERATURE_HUMIDITY_READING);
-    POWER_enable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_STOP);
 #endif
 #ifdef HMD_TEMPERATURE_HUMIDITY_ENS21X_ENABLE
     // Get temperature and humidity from ENS210.
@@ -627,8 +622,7 @@ static void _HMD_update_temperature_humidity(void) {
     }
 #endif
 #if ((defined HMD_TEMPERATURE_HUMIDITY_SHT3X_ENABLE) || (defined HMD_TEMPERATURE_HUMIDITY_ENS21X_ENABLE))
-    // Turn sensors off.
-    POWER_disable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS);
+    // Turn LED off.
     LED_set_activity(LED_ACTIVITY_NONE);
 #endif
 }
@@ -652,8 +646,6 @@ static void _HMD_update_air_quality(void) {
 #ifdef ENS16X_DRIVER_DEVICE_ENS161
     hmd_ctx.air_quality_data.aqi_s = SIGFOX_EP_ERROR_VALUE_AQI_S;
 #endif
-    // Turn sensors on.
-    POWER_enable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_STOP);
     // Read device status.
     ens16x_status = ENS16X_get_device_status(I2C_ADDRESS_ENS16X, &hmd_ctx.air_quality_acquisition_status);
     ENS16X_stack_error(ERROR_BASE_ENS16X);
@@ -711,10 +703,9 @@ static void _HMD_update_air_quality(void) {
             }
         }
         while (hmd_ctx.air_quality_acquisition_time_ms < HMD_AIR_QUALITY_ACQUISITION_TIME_MAX_MS);
-        // Turn sensors off.
-        POWER_disable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS);
-        LED_set_activity(LED_ACTIVITY_NONE);
     }
+    // Turn LED off.
+    LED_set_activity(LED_ACTIVITY_NONE);
 }
 #endif
 
@@ -866,9 +857,15 @@ int main(void) {
             break;
         case HMD_STATE_MONITORING:
             IWDG_reload();
+            // Turn sensors on.
+            POWER_enable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_ANALOG, LPTIM_DELAY_MODE_ACTIVE);
+            POWER_enable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_ACTIVE);
             // Measure related data.
             _HMD_update_battery_voltage();
             _HMD_update_temperature_humidity();
+            // Turn sensors off.
+            POWER_disable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_ANALOG);
+            POWER_disable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS);
             // Update status.
             rcc_status = RCC_get_status(RCC_CLOCK_LSI, &generic_u8);
             RCC_stack_error(ERROR_BASE_RCC);
@@ -894,8 +891,12 @@ int main(void) {
 #ifdef HMD_BUTTON_ENABLE
         case HMD_STATE_BUTTON:
             IWDG_reload();
+            // Turn sensors on.
+            POWER_enable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_ANALOG, LPTIM_DELAY_MODE_ACTIVE);
             // Measure related data.
             _HMD_update_battery_voltage();
+            // Turn sensors off.
+            POWER_disable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_ANALOG);
             // Compute LED color.
             if (hmd_ctx.vbatt_mv == SIGFOX_EP_ERROR_VALUE_ANALOG_16BITS) {
                 led_color = LED_COLOR_OFF;
@@ -927,9 +928,13 @@ int main(void) {
 #ifdef HMD_AIR_QUALITY_ENABLE
         case HMD_STATE_AIR_QUALITY:
             IWDG_reload();
+            // Turn sensors on.
+            POWER_enable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_SLEEP);
             // Measure related data.
             _HMD_update_temperature_humidity();
             _HMD_update_air_quality();
+            // Turn sensors off.
+            POWER_disable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS);
             // Build frame.
             sigfox_ep_ul_payload_air_quality.acquisition_duration_tens_seconds = (hmd_ctx.air_quality_acquisition_time_ms / 10000);
             sigfox_ep_ul_payload_air_quality.acquisition_status = hmd_ctx.air_quality_acquisition_status.validity_flag;
@@ -961,7 +966,7 @@ int main(void) {
             SENSORS_HW_disable_sensor_interrupt();
             // Turn sensors on.
             LED_set_activity(LED_ACTIVITY_ACCELEROMETER_READING);
-            POWER_enable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_STOP);
+            POWER_enable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_SLEEP);
             // Disable accelerometer.
             fxls89xxxx_status = FXLS89XXXX_write_configuration(I2C_ADDRESS_FXLS8974CF, FXLS89XXXX_SLEEP_CONFIGURATION, FXLS89XXXX_SLEEP_CONFIGURATION_SIZE);
             FXLS89XXXX_stack_error(ERROR_BASE_FXLS8974CF);
@@ -1041,7 +1046,7 @@ int main(void) {
             if ((generic_u32 >= (hmd_ctx.accelerometer_last_time_seconds + hmd_ctx.timings.accelerometer_blanking_time_seconds)) && (hmd_ctx.accelerometer_state == 0)) {
                 // Turn sensors on.
                 LED_set_activity(LED_ACTIVITY_ACCELEROMETER_READING);
-                POWER_enable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_STOP);
+                POWER_enable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_SLEEP);
                 // Enable accelerometer.
                 fxls89xxxx_status = FXLS89XXXX_write_configuration(I2C_ADDRESS_FXLS8974CF, FXLS89XXXX_ACTIVE_CONFIGURATION, FXLS89XXXX_ACTIVE_CONFIGURATION_SIZE);
                 FXLS89XXXX_stack_error(ERROR_BASE_FXLS8974CF);
