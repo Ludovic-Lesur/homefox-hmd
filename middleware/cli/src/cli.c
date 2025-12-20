@@ -496,7 +496,7 @@ static AT_status_t _CLI_aqs_control_callback(void) {
     // Check state.
     if (state == 0) {
         // Stop acquisition.
-        ens16x_status = ENS16X_stop_acquisition(I2C_ADDRESS_ENS16X);
+        ens16x_status = ENS16X_set_operating_mode(I2C_ADDRESS_ENS16X, ENS16X_OPERATING_MODE_IDLE);
         _CLI_check_driver_status(ens16x_status, ENS16X_SUCCESS, ERROR_BASE_ENS16X);
         // Turn digital sensors off.
         POWER_disable(POWER_REQUESTER_ID_CLI_AQS, POWER_DOMAIN_SENSORS);
@@ -516,8 +516,13 @@ static AT_status_t _CLI_aqs_control_callback(void) {
         _CLI_check_driver_status(sht3x_status, SHT3X_SUCCESS, ERROR_BASE_SHT30);
 #endif
 #endif
+        // Set RHT compensation.
+        ens16x_status = ENS16X_set_temperature_humidity(I2C_ADDRESS_ENS16X, temperature_tenth_degrees, humidity_percent);
+        _CLI_check_driver_status(ens16x_status, ENS16X_SUCCESS, ERROR_BASE_ENS16X);
         // Start acquisition.
-        ens16x_status = ENS16X_start_acquisition(I2C_ADDRESS_ENS16X, ENS16X_SENSING_MODE_STANDARD, temperature_tenth_degrees, humidity_percent);
+        ens16x_status = ENS16X_set_operating_mode(I2C_ADDRESS_ENS16X, ENS16X_OPERATING_MODE_IDLE);
+        _CLI_check_driver_status(ens16x_status, ENS16X_SUCCESS, ERROR_BASE_ENS16X);
+        ens16x_status = ENS16X_set_operating_mode(I2C_ADDRESS_ENS16X, ENS16X_OPERATING_MODE_STANDARD);
         _CLI_check_driver_status(ens16x_status, ENS16X_SUCCESS, ERROR_BASE_ENS16X);
         // Update start time if needed.
         if (cli_ctx.aqs_running_flag == 0) {

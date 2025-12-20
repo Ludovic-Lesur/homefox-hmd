@@ -536,9 +536,11 @@ static void _HMD_init_hw(void) {
 #endif
     led_status = LED_init();
     LED_stack_error(ERROR_BASE_LED);
+#ifndef HMD_MODE_CLI
     // Init device configuration.
     _HMD_store_timings(&hmd_ctx.timings);
     _HMD_store_led_color(&hmd_ctx.led_color);
+#endif
 }
 
 #ifndef HMD_MODE_CLI
