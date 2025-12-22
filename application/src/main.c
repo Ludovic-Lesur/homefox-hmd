@@ -662,6 +662,8 @@ static void _HMD_update_air_quality(void) {
     // Set RHT compensation.
     ens16x_status = ENS16X_set_temperature_humidity(I2C_ADDRESS_ENS16X, tamb_tenth_degrees, hamb_percent);
     ENS16X_stack_error(ERROR_BASE_ENS16X);
+    // Directly exit in case of POR.
+    if (hmd_ctx.state == HMD_STATE_STARTUP) goto errors;
     // Directly exit in case of error.
     if (ens16x_status == ENS16X_SUCCESS) {
         // Wait for acquisition time.
@@ -708,6 +710,8 @@ static void _HMD_update_air_quality(void) {
     }
     // Turn LED off.
     LED_set_activity(LED_ACTIVITY_NONE);
+errors:
+    return;
 }
 #endif
 
@@ -840,6 +844,13 @@ int main(void) {
         switch (hmd_ctx.state) {
         case HMD_STATE_STARTUP:
             IWDG_reload();
+#ifdef HMD_AIR_QUALITY_ENABLE
+            // Start air quality sensor
+            POWER_enable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_SLEEP);
+            _HMD_update_temperature_humidity();
+            _HMD_update_air_quality();
+            POWER_disable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS);
+#endif
             // Fill reset reason and software version.
             sigfox_ep_ul_payload_startup.reset_reason = PWR_get_reset_flags();
             sigfox_ep_ul_payload_startup.major_version = GIT_MAJOR_VERSION;
