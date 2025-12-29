@@ -40,7 +40,7 @@
 /*** MAIN local macros ***/
 
 // Monitoring period.
-#define HMD_MONITORING_PERIOD_MINUTES_DEFAULT               60
+#define HMD_MONITORING_PERIOD_MINUTES_DEFAULT               30
 #define HMD_MONITORING_PERIOD_MINUTES_MIN                   10
 #define HMD_MONITORING_PERIOD_MINUTES_MAX                   10080
 // Downlink period.
@@ -54,7 +54,7 @@
 #define HMD_VBATT_INDICATOR_RANGE                           7
 #define HMD_VBATT_INDICATOR_DELAY_MS                        3000
 // Air quality.
-#define HMD_AIR_QUALITY_PERIOD_MINUTES_DEFAULT              60
+#define HMD_AIR_QUALITY_PERIOD_MINUTES_DEFAULT              30
 #define HMD_AIR_QUALITY_PERIOD_MINUTES_MIN                  10
 #define HMD_AIR_QUALITY_PERIOD_MINUTES_MAX                  10080
 #define HMD_AIR_QUALITY_ACQUISITION_DELAY_MS                10000
@@ -639,6 +639,7 @@ static void _HMD_update_air_quality(void) {
     ENS16X_air_quality_data_t air_quality_data;
     int32_t tamb_tenth_degrees = ((hmd_ctx.tamb_tenth_degrees != SIGFOX_EP_ERROR_VALUE_TEMPERATURE) ? hmd_ctx.tamb_tenth_degrees : 25);;
     int32_t hamb_percent = ((hmd_ctx.hamb_percent != SIGFOX_EP_ERROR_VALUE_HUMIDITY) ? hmd_ctx.hamb_percent : 50);
+    uint32_t acquisition_time_min_ms = 0;
     // Reset data.
     hmd_ctx.air_quality_acquisition_time_ms = 0;
     hmd_ctx.air_quality_acquisition_status.validity_flag = ENS16X_VALIDITY_FLAG_INVALID_OUTPUT;
@@ -658,6 +659,8 @@ static void _HMD_update_air_quality(void) {
         ENS16X_stack_error(ERROR_BASE_ENS16X);
         ens16x_status = ENS16X_set_operating_mode(I2C_ADDRESS_ENS16X, HMD_AIR_QUALITY_ACQUISITION_MODE);
         ENS16X_stack_error(ERROR_BASE_ENS16X);
+        // Set minimum time.
+        acquisition_time_min_ms = HMD_AIR_QUALITY_ACQUISITION_TIME_MIN_MS;
     }
     // Set RHT compensation.
     ens16x_status = ENS16X_set_temperature_humidity(I2C_ADDRESS_ENS16X, tamb_tenth_degrees, hamb_percent);
@@ -694,7 +697,7 @@ static void _HMD_update_air_quality(void) {
                 // Check status.
                 if (ens16x_status != ENS16X_SUCCESS) break;
                 // Check validity flag and minimum time.
-                if ((hmd_ctx.air_quality_acquisition_status.validity_flag == ENS16X_VALIDITY_FLAG_NORMAL_OPERATION) && (hmd_ctx.air_quality_acquisition_time_ms >= HMD_AIR_QUALITY_ACQUISITION_TIME_MIN_MS)) {
+                if ((hmd_ctx.air_quality_acquisition_status.validity_flag == ENS16X_VALIDITY_FLAG_NORMAL_OPERATION) && (hmd_ctx.air_quality_acquisition_time_ms >= acquisition_time_min_ms)) {
                     // Update data.
                     hmd_ctx.air_quality_data.tvoc_ppb = (air_quality_data.tvoc_ppb);
                     hmd_ctx.air_quality_data.eco2_ppm = (air_quality_data.eco2_ppm);
