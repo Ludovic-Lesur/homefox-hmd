@@ -155,9 +155,10 @@ typedef struct {
     uint32_t error_stack_last_time_seconds;
 #ifdef HMD_AIR_QUALITY_ENABLE
     uint32_t air_quality_last_time_seconds;
-    uint32_t air_quality_acquisition_time_ms;
-    ENS16X_device_status_t air_quality_acquisition_status;
     ENS16X_air_quality_data_t air_quality_data;
+    ENS16X_operating_mode_t air_quality_acquisition_mode;
+    ENS16X_device_status_t air_quality_acquisition_status;
+    uint32_t air_quality_acquisition_time_ms;
 #endif
 #ifdef HMD_ACCELEROMETER_ENABLE
     uint8_t accelerometer_state;
@@ -641,20 +642,23 @@ static void _HMD_update_air_quality(void) {
     int32_t hamb_percent = ((hmd_ctx.hamb_percent != SIGFOX_EP_ERROR_VALUE_HUMIDITY) ? hmd_ctx.hamb_percent : 50);
     uint32_t acquisition_time_min_ms = 0;
     // Reset data.
-    hmd_ctx.air_quality_acquisition_time_ms = 0;
-    hmd_ctx.air_quality_acquisition_status.validity_flag = ENS16X_VALIDITY_FLAG_INVALID_OUTPUT;
     hmd_ctx.air_quality_data.tvoc_ppb = SIGFOX_EP_ERROR_VALUE_TVOC;
     hmd_ctx.air_quality_data.eco2_ppm = SIGFOX_EP_ERROR_VALUE_ECO2;
     hmd_ctx.air_quality_data.aqi_uba = SIGFOX_EP_ERROR_VALUE_AQI_UBA;
 #ifdef ENS16X_DRIVER_DEVICE_ENS161
     hmd_ctx.air_quality_data.aqi_s = SIGFOX_EP_ERROR_VALUE_AQI_S;
 #endif
+    hmd_ctx.air_quality_acquisition_mode = SIGFOX_EP_ERROR_VALUE_ACQUISITION_MODE;
+    hmd_ctx.air_quality_acquisition_status.validity_flag = ENS16X_VALIDITY_FLAG_INVALID_OUTPUT;
+    hmd_ctx.air_quality_acquisition_time_ms = 0;
     // Read device status.
-    ens16x_status = ENS16X_get_device_status(I2C_ADDRESS_ENS16X, &hmd_ctx.air_quality_acquisition_status);
+    ens16x_status = ENS16X_get_operating_mode(I2C_ADDRESS_ENS16X, &(hmd_ctx.air_quality_acquisition_mode));
     ENS16X_stack_error(ERROR_BASE_ENS16X);
     // Check if sensor is running.
-    if (hmd_ctx.air_quality_acquisition_status.statas == 0) {
+    if (hmd_ctx.air_quality_acquisition_mode != HMD_AIR_QUALITY_ACQUISITION_MODE) {
         // Start acquisition.
+        ens16x_status = ENS16X_set_operating_mode(I2C_ADDRESS_ENS16X, ENS16X_OPERATING_MODE_RESET);
+        ENS16X_stack_error(ERROR_BASE_ENS16X);
         ens16x_status = ENS16X_set_operating_mode(I2C_ADDRESS_ENS16X, ENS16X_OPERATING_MODE_IDLE);
         ENS16X_stack_error(ERROR_BASE_ENS16X);
         ens16x_status = ENS16X_set_operating_mode(I2C_ADDRESS_ENS16X, HMD_AIR_QUALITY_ACQUISITION_MODE);
@@ -952,8 +956,6 @@ int main(void) {
             // Turn sensors off.
             POWER_disable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS);
             // Build frame.
-            sigfox_ep_ul_payload_air_quality.acquisition_duration_tens_seconds = (hmd_ctx.air_quality_acquisition_time_ms / 10000);
-            sigfox_ep_ul_payload_air_quality.acquisition_status = hmd_ctx.air_quality_acquisition_status.validity_flag;
             sigfox_ep_ul_payload_air_quality.tvoc_ppb = hmd_ctx.air_quality_data.tvoc_ppb;
             sigfox_ep_ul_payload_air_quality.eco2_ppm = hmd_ctx.air_quality_data.eco2_ppm;
             sigfox_ep_ul_payload_air_quality.aqi_uba = hmd_ctx.air_quality_data.aqi_uba;
@@ -962,6 +964,19 @@ int main(void) {
 #else
             sigfox_ep_ul_payload_air_quality.aqi_s = SIGFOX_EP_ERROR_VALUE_AQI_S;
 #endif
+            if (hmd_ctx.air_quality_acquisition_mode == ENS16X_OPERATING_MODE_RESET) {
+                sigfox_ep_ul_payload_air_quality.acquisition_operating_mode = SIGFOX_EP_REMAP_VALUE_ACQUISITION_MODE_RESET;
+            }
+            else if (hmd_ctx.air_quality_acquisition_mode > SIGFOX_EP_ERROR_VALUE_ACQUISITION_MODE) {
+                sigfox_ep_ul_payload_air_quality.acquisition_operating_mode = SIGFOX_EP_ERROR_VALUE_ACQUISITION_MODE;
+            }
+            else {
+                sigfox_ep_ul_payload_air_quality.acquisition_operating_mode = hmd_ctx.air_quality_acquisition_mode;
+            }
+            sigfox_ep_ul_payload_air_quality.acquisition_operating_mode = hmd_ctx.air_quality_acquisition_mode;
+            sigfox_ep_ul_payload_air_quality.acquisition_status = hmd_ctx.air_quality_acquisition_status.validity_flag;
+            sigfox_ep_ul_payload_air_quality.acquisition_duration_tens_seconds = (hmd_ctx.air_quality_acquisition_time_ms / 10000);
+
             // Send uplink air quality frame.
             sigfox_ep_application_message.ul_payload = (sfx_u8*) (sigfox_ep_ul_payload_air_quality.frame);
             sigfox_ep_application_message.ul_payload_size_bytes = SIGFOX_EP_UL_PAYLOAD_SIZE_AIR_QUALITY;

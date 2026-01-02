@@ -15,24 +15,26 @@
 /*** SIGFOX EP FRAMES macros ***/
 
 // Uplink payload sizes.
-#define SIGFOX_EP_UL_PAYLOAD_SIZE_STARTUP           8
-#define SIGFOX_EP_UL_PAYLOAD_SIZE_ERROR_STACK       12
-#define SIGFOX_EP_UL_PAYLOAD_SIZE_MONITORING        6
+#define SIGFOX_EP_UL_PAYLOAD_SIZE_STARTUP               8
+#define SIGFOX_EP_UL_PAYLOAD_SIZE_ERROR_STACK           12
+#define SIGFOX_EP_UL_PAYLOAD_SIZE_MONITORING            6
 #ifdef HMD_AIR_QUALITY_ENABLE
-#define SIGFOX_EP_UL_PAYLOAD_SIZE_AIR_QUALITY       7
+#define SIGFOX_EP_UL_PAYLOAD_SIZE_AIR_QUALITY           7
 #endif
 #ifdef HMD_ACCELEROMETER_ENABLE
-#define SIGFOX_EP_UL_PAYLOAD_SIZE_ACCELEROMETER     1
+#define SIGFOX_EP_UL_PAYLOAD_SIZE_ACCELEROMETER         1
 #endif
 // Error values.
-#define SIGFOX_EP_ERROR_VALUE_ANALOG_16BITS         0xFFFF
-#define SIGFOX_EP_ERROR_VALUE_TEMPERATURE           0x7FF
-#define SIGFOX_EP_ERROR_VALUE_HUMIDITY              0xFF
+#define SIGFOX_EP_ERROR_VALUE_ANALOG_16BITS             0xFFFF
+#define SIGFOX_EP_ERROR_VALUE_TEMPERATURE               0x7FF
+#define SIGFOX_EP_ERROR_VALUE_HUMIDITY                  0xFF
 #ifdef HMD_AIR_QUALITY_ENABLE
-#define SIGFOX_EP_ERROR_VALUE_TVOC                  0xFFFF
-#define SIGFOX_EP_ERROR_VALUE_ECO2                  0xFFFF
-#define SIGFOX_EP_ERROR_VALUE_AQI_UBA               0b1111
-#define SIGFOX_EP_ERROR_VALUE_AQI_S                 0xFFF
+#define SIGFOX_EP_ERROR_VALUE_TVOC                      0xFFFF
+#define SIGFOX_EP_ERROR_VALUE_ECO2                      0xFFFF
+#define SIGFOX_EP_ERROR_VALUE_AQI_UBA                   0b111
+#define SIGFOX_EP_ERROR_VALUE_AQI_S                     0b1111111111
+#define SIGFOX_EP_ERROR_VALUE_ACQUISITION_MODE          0b111
+#define SIGFOX_EP_REMAP_VALUE_ACQUISITION_MODE_RESET    0b110
 #endif
 
 /*** SIGFOX EP FRAMES structures ***/
@@ -76,12 +78,13 @@ typedef union {
 typedef union {
     uint8_t frame[SIGFOX_EP_UL_PAYLOAD_SIZE_AIR_QUALITY];
     struct {
-        unsigned acquisition_duration_tens_seconds :6;
-        unsigned acquisition_status :2;
         unsigned tvoc_ppb :16;
         unsigned eco2_ppm :16;
-        unsigned aqi_uba :4;
-        unsigned aqi_s :12;
+        unsigned aqi_uba :3;
+        unsigned aqi_s :10;
+        unsigned acquisition_operating_mode :3;
+        unsigned acquisition_status :2;
+        unsigned acquisition_duration_tens_seconds :6;
     } __attribute__((scalar_storage_order("big-endian"))) __attribute__((packed));
 } SIGFOX_EP_ul_payload_air_quality_t;
 #endif
