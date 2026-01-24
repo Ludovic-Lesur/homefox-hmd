@@ -234,7 +234,7 @@ RF_API_status_t RF_API_init(RF_API_radio_parameters_t* radio_parameters) {
     RFE_status_t rfe_status = RFE_SUCCESS;
     LED_status_t led_status = LED_SUCCESS;
     SX126X_modulation_parameters_t modulation_parameters;
-    uint16_t op_error = 0;
+    sfx_u16 op_error = 0;
 #ifdef SIGFOX_EP_BIDIRECTIONAL
     sfx_u8 dl_ft[SIGFOX_DL_FT_SIZE_BYTES] = SIGFOX_DL_FT;
     SX126X_gfsk_packet_parameters_t gfsk_packet_parameters;
@@ -622,10 +622,8 @@ RF_API_status_t RF_API_get_version(sfx_u8 **version, sfx_u8 *version_size_char) 
 /*******************************************************************/
 void RF_API_error(void) {
     // Force all front-end off.
-    SX126X_reset(1);
-    RFE_set_path(RFE_PATH_NONE);
-    LED_set_activity(LED_ACTIVITY_NONE);
-    POWER_disable(POWER_REQUESTER_ID_RF_API, POWER_DOMAIN_TCXO);
-    POWER_disable(POWER_REQUESTER_ID_RF_API, POWER_DOMAIN_RADIO);
+    RF_API_de_init();
+    RF_API_sleep();
+
 }
 #endif
