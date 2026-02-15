@@ -14,7 +14,8 @@ The board was designed on **Circuit Maker V2.0**. Below is the list of hardware 
 
 | Hardware revision | Description | Status |
 |:---:|:---:|:---:|
-| [HMD HW1.0](https://365.altium.com/files/21353EBB-5412-4C6F-A8E0-7281AC274F13) | Initial version. | :hammer: |
+| [HMD HW1.0](https://365.altium.com/files/21353EBB-5412-4C6F-A8E0-7281AC274F13) | Initial version. | :x: |
+| [HMD HW2.0](https://365.altium.com/files/B495104F-B4DE-4F3F-935E-B6F2A86241CF) | Improved radio front-end, additional sensors power configuration and lower consumption with ENS161.  | :white_check_mark: |
 
 # Embedded software
 
