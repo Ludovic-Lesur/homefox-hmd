@@ -1,5 +1,5 @@
 /*
- * ens160_hw.c
+ * ens16x_hw.c
  *
  *  Created on: 21 sep. 2025
  *      Author: Ludo

@@ -43,3 +43,23 @@ The project is organized as follow:
     * `power` : Board **power tree** manager.
     * `sigfox` : **Sigfox EP_LIB** and **ADDON_RFP** submodules and low level implementation.
 * `application` : Main **application**.
+
+## Build
+
+The project can be compiled by command line with `cmake`.
+
+```bash
+mkdir build
+cd build
+cmake -DCMAKE_TOOLCHAIN_FILE="script/cmake-arm-none-eabi/toolchain.cmake" \
+      -DTOOLCHAIN_PATH="<arm_none_eabi_gcc_path>" \
+      -DHMD_HW_VERSION="<cmake_hw_version>" \
+      -DHMD_MODE_CLI=OFF \
+      -DHMD_BUTTON_ENABLE=ON \
+      -DHMD_TEMPERATURE_HUMIDITY_SHT3X_ENABLE=ON \
+      -DHMD_TEMPERATURE_HUMIDITY_ENS21X_ENABLE=ON \
+      -DHMD_AIR_QUALITY_ENABLE=ON \
+      -DHMD_ACCELEROMETER_ENABLE=ON \
+      -G "Unix Makefiles" ..
+make all
+```
