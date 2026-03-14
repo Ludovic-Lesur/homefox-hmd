@@ -1,0 +1,82 @@
+{
+    "hw_configuration_list": [
+        {
+            "hw_flags": {
+                "HMD_HW_VERSION": "HW1_0"
+            },
+            "sw_configuration_list": [
+                {
+                    "sw_flags": {
+                        "HMD_MODE_CLI": "OFF",
+                        "HMD_BUTTON_ENABLE": "ON",
+                        "HMD_TEMPERATURE_HUMIDITY_SHT3X_ENABLE": "ON",
+                        "HMD_TEMPERATURE_HUMIDITY_ENS21X_ENABLE": "ON",
+                        "HMD_AIR_QUALITY_ENABLE": "ON",
+                        "HMD_ACCELEROMETER_ENABLE": "ON"
+                    }
+                }
+            ]
+        },
+        {
+            "hw_flags": {
+                "HMD_HW_VERSION": "HW2_0"
+            },
+            "sw_configuration_list": [
+                {
+                    "sw_flags": {
+                        "HMD_MODE_CLI": "OFF",
+                        "HMD_BUTTON_ENABLE": "ON",
+                        "HMD_TEMPERATURE_HUMIDITY_SHT3X_ENABLE": "ON",
+                        "HMD_TEMPERATURE_HUMIDITY_ENS21X_ENABLE": "ON",
+                        "HMD_AIR_QUALITY_ENABLE": "ON",
+                        "HMD_ACCELEROMETER_ENABLE": "ON"
+                    }
+                },
+                {
+                    "name": "temperature-humidity",
+                    "sw_flags": {
+                        "HMD_MODE_CLI": "OFF",
+                        "HMD_BUTTON_ENABLE": "ON",
+                        "HMD_TEMPERATURE_HUMIDITY_SHT3X_ENABLE": "ON",
+                        "HMD_TEMPERATURE_HUMIDITY_ENS21X_ENABLE": "OFF",
+                        "HMD_AIR_QUALITY_ENABLE": "OFF",
+                        "HMD_ACCELEROMETER_ENABLE": "OFF"
+                    }
+                },
+                {
+                    "name": "air-quality",
+                    "sw_flags": {
+                        "HMD_MODE_CLI": "OFF",
+                        "HMD_BUTTON_ENABLE": "ON",
+                        "HMD_TEMPERATURE_HUMIDITY_SHT3X_ENABLE": "ON",
+                        "HMD_TEMPERATURE_HUMIDITY_ENS21X_ENABLE": "ON",
+                        "HMD_AIR_QUALITY_ENABLE": "ON",
+                        "HMD_ACCELEROMETER_ENABLE": "OFF"
+                    }
+                },
+                {
+                    "name": "accelerometer",
+                    "sw_flags": {
+                        "HMD_MODE_CLI": "OFF",
+                        "HMD_BUTTON_ENABLE": "ON",
+                        "HMD_TEMPERATURE_HUMIDITY_SHT3X_ENABLE": "ON",
+                        "HMD_TEMPERATURE_HUMIDITY_ENS21X_ENABLE": "OFF",
+                        "HMD_AIR_QUALITY_ENABLE": "OFF",
+                        "HMD_ACCELEROMETER_ENABLE": "ON"
+                    }
+                },
+                {
+                    "name": "cli",
+                    "sw_flags": {
+                        "HMD_MODE_CLI": "ON",
+                        "HMD_BUTTON_ENABLE": "ON",
+                        "HMD_TEMPERATURE_HUMIDITY_SHT3X_ENABLE": "ON",
+                        "HMD_TEMPERATURE_HUMIDITY_ENS21X_ENABLE": "ON",
+                        "HMD_AIR_QUALITY_ENABLE": "ON",
+                        "HMD_ACCELEROMETER_ENABLE": "ON"
+                    }
+                }
+            ]
+        }
+    ]
+}
