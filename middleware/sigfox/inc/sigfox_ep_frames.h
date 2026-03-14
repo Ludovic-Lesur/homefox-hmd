@@ -25,7 +25,7 @@
 #define SIGFOX_EP_UL_PAYLOAD_SIZE_ACCELEROMETER         1
 #endif
 // Error values.
-#define SIGFOX_EP_ERROR_VALUE_ANALOG_16BITS             0xFFFF
+#define SIGFOX_EP_ERROR_VALUE_STORAGE_VOLTAGE           0xFFFF
 #define SIGFOX_EP_ERROR_VALUE_TEMPERATURE               0x7FF
 #define SIGFOX_EP_ERROR_VALUE_HUMIDITY                  0xFF
 #ifdef HMD_AIR_QUALITY_ENABLE
@@ -62,10 +62,10 @@ typedef union {
 typedef union {
     uint8_t frame[SIGFOX_EP_UL_PAYLOAD_SIZE_MONITORING];
     struct {
-        unsigned vbatt_mv :16;
+        unsigned storage_voltage_mv :16;
         unsigned unused :4;
-        unsigned tamb_tenth_degrees :12;
-        unsigned hamb_percent :8;
+        unsigned temperature_tenth_degrees :12;
+        unsigned humidity_percent :8;
         unsigned status :8;
     } __attribute__((scalar_storage_order("big-endian"))) __attribute__((packed));
 } SIGFOX_EP_ul_payload_monitoring_t;

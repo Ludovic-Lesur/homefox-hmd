@@ -48,11 +48,11 @@
 // Error stack.
 #define HMD_ERROR_STACK_BLANKING_TIME_SECONDS               86400
 // Voltage hysteresis for radio.
-#define HMD_RADIO_ON_VSTR_THRESHOLD_MV                      3700
-#define HMD_RADIO_OFF_VSTR_THRESHOLD_MV                     3500
-// VBATT indicator.
-#define HMD_VBATT_INDICATOR_RANGE                           7
-#define HMD_VBATT_INDICATOR_DELAY_MS                        3000
+#define HMD_RADIO_ON_STORAGE_VOLTAGE_THRESHOLD_MV           3700
+#define HMD_RADIO_OFF_STORAGE_VOLTAGE_THRESHOLD_MV          3500
+// STORAGE_VOLTAGE indicator.
+#define HMD_STORAGE_VOLTAGE_INDICATOR_RANGE                 7
+#define HMD_STORAGE_VOLTAGE_INDICATOR_DELAY_MS              3000
 // Air quality.
 #define HMD_AIR_QUALITY_PERIOD_MINUTES_DEFAULT              30
 #define HMD_AIR_QUALITY_PERIOD_MINUTES_MIN                  10
@@ -134,7 +134,7 @@ typedef struct {
 typedef struct {
     int32_t threshold_mv;
     LED_color_t led_color;
-} HMD_vbatt_indicator_t;
+} HMD_storage_voltage_indicator_t;
 
 /*******************************************************************/
 typedef struct {
@@ -144,9 +144,9 @@ typedef struct {
     volatile HMD_flags_t flags;
     // Monitoring.
     uint32_t monitoring_last_time_seconds;
-    uint16_t vbatt_mv;
-    uint16_t tamb_tenth_degrees;
-    uint8_t hamb_percent;
+    uint16_t storage_voltage_mv;
+    uint16_t temperature_tenth_degrees;
+    uint8_t humidity_percent;
     // Downlink.
     uint32_t downlink_last_time_seconds;
     HMD_timings_t timings;
@@ -173,7 +173,7 @@ static HMD_context_t hmd_ctx;
 #endif
 
 #if (!(defined HMD_MODE_CLI) && (defined HMD_BUTTON_ENABLE))
-static const HMD_vbatt_indicator_t HMD_VBATT_INDICATOR[HMD_VBATT_INDICATOR_RANGE] = {
+static const HMD_storage_voltage_indicator_t HMD_STORAGE_VOLTAGE_INDICATOR[HMD_STORAGE_VOLTAGE_INDICATOR_RANGE] = {
     { 4100, LED_COLOR_GREEN },
     { 4000, LED_COLOR_CYAN },
     { 3900, LED_COLOR_WHITE },
@@ -461,9 +461,9 @@ static void _HMD_init_context(void) {
     hmd_ctx.monitoring_last_time_seconds = 0;
     hmd_ctx.downlink_last_time_seconds = 0;
     hmd_ctx.error_stack_last_time_seconds = 0;
-    hmd_ctx.vbatt_mv = SIGFOX_EP_ERROR_VALUE_ANALOG_16BITS;
-    hmd_ctx.tamb_tenth_degrees = SIGFOX_EP_ERROR_VALUE_TEMPERATURE;
-    hmd_ctx.hamb_percent = SIGFOX_EP_ERROR_VALUE_HUMIDITY;
+    hmd_ctx.storage_voltage_mv = SIGFOX_EP_ERROR_VALUE_STORAGE_VOLTAGE;
+    hmd_ctx.temperature_tenth_degrees = SIGFOX_EP_ERROR_VALUE_TEMPERATURE;
+    hmd_ctx.humidity_percent = SIGFOX_EP_ERROR_VALUE_HUMIDITY;
 #ifdef HMD_TEMPERATURE_HUMIDITY_SHT3X_ENABLE
     hmd_ctx.status.temperature_humidity_sht3x_enable = 1;
 #endif
@@ -549,22 +549,22 @@ static void _HMD_init_hw(void) {
 static void _HMD_update_battery_voltage(void) {
     // Local variables.
     ANALOG_status_t analog_status = ANALOG_SUCCESS;
-    int32_t vbatt = 0;
+    int32_t storage_voltage_mv = 0;
     // Reset data.
-    hmd_ctx.vbatt_mv = SIGFOX_EP_ERROR_VALUE_ANALOG_16BITS;
+    hmd_ctx.storage_voltage_mv = SIGFOX_EP_ERROR_VALUE_STORAGE_VOLTAGE;
     // Perform battery voltage measurement.
-    analog_status = ANALOG_convert_channel(ANALOG_CHANNEL_VBATT_MV, &vbatt);
+    analog_status = ANALOG_convert_channel(ANALOG_CHANNEL_STORAGE_VOLTAGE_MV, &storage_voltage_mv);
     ANALOG_stack_error(ERROR_BASE_ANALOG);
     if (analog_status == ANALOG_SUCCESS) {
         // Voltage hysteresis for radio.
-        if (vbatt < HMD_RADIO_OFF_VSTR_THRESHOLD_MV) {
+        if (storage_voltage_mv < HMD_RADIO_OFF_STORAGE_VOLTAGE_THRESHOLD_MV) {
             hmd_ctx.flags.radio_enabled = 0;
         }
-        if (vbatt > HMD_RADIO_ON_VSTR_THRESHOLD_MV) {
+        if (storage_voltage_mv > HMD_RADIO_ON_STORAGE_VOLTAGE_THRESHOLD_MV) {
             hmd_ctx.flags.radio_enabled = 1;
         }
         // Update data.
-        hmd_ctx.vbatt_mv = (uint16_t) vbatt;
+        hmd_ctx.storage_voltage_mv = (uint16_t) storage_voltage_mv;
     }
 }
 #endif
@@ -586,8 +586,8 @@ static void _HMD_update_temperature_humidity(void) {
     ENS21X_status_t ens21x_status = ENS21X_SUCCESS;
 #endif
     // Reset data.
-    hmd_ctx.tamb_tenth_degrees = SIGFOX_EP_ERROR_VALUE_TEMPERATURE;
-    hmd_ctx.hamb_percent = SIGFOX_EP_ERROR_VALUE_HUMIDITY;
+    hmd_ctx.temperature_tenth_degrees = SIGFOX_EP_ERROR_VALUE_TEMPERATURE;
+    hmd_ctx.humidity_percent = SIGFOX_EP_ERROR_VALUE_HUMIDITY;
 #if ((defined HMD_TEMPERATURE_HUMIDITY_SHT3X_ENABLE) || (defined HMD_TEMPERATURE_HUMIDITY_ENS21X_ENABLE))
     // Turn LED on.
     LED_set_activity(LED_ACTIVITY_TEMPERATURE_HUMIDITY_READING);
@@ -602,13 +602,13 @@ static void _HMD_update_temperature_humidity(void) {
        math_status = MATH_integer_to_signed_magnitude(temperature, 11, &temperature_signed_magnitude);
        MATH_stack_error(ERROR_BASE_MATH);
        if (math_status == MATH_SUCCESS) {
-           hmd_ctx.tamb_tenth_degrees = (uint16_t) temperature_signed_magnitude;
+           hmd_ctx.temperature_tenth_degrees = (uint16_t) temperature_signed_magnitude;
        }
-       hmd_ctx.hamb_percent = (uint8_t) humidity;
+       hmd_ctx.humidity_percent = (uint8_t) humidity;
     }
 #endif
 #ifdef HMD_TEMPERATURE_HUMIDITY_SHT3X_ENABLE
-    if ((hmd_ctx.tamb_tenth_degrees == SIGFOX_EP_ERROR_VALUE_TEMPERATURE) || (hmd_ctx.hamb_percent == SIGFOX_EP_ERROR_VALUE_HUMIDITY)) {
+    if ((hmd_ctx.temperature_tenth_degrees == SIGFOX_EP_ERROR_VALUE_TEMPERATURE) || (hmd_ctx.humidity_percent == SIGFOX_EP_ERROR_VALUE_HUMIDITY)) {
         // Get temperature and humidity from SHT30.
         sht3x_status = SHT3X_get_temperature_humidity(I2C_ADDRESS_SHT30, &temperature, &humidity);
         SHT3X_stack_error(ERROR_BASE_SHT30);
@@ -618,9 +618,9 @@ static void _HMD_update_temperature_humidity(void) {
            math_status = MATH_integer_to_signed_magnitude(temperature, 11, &temperature_signed_magnitude);
            MATH_stack_error(ERROR_BASE_MATH);
            if (math_status == MATH_SUCCESS) {
-               hmd_ctx.tamb_tenth_degrees = (uint16_t) temperature_signed_magnitude;
+               hmd_ctx.temperature_tenth_degrees = (uint16_t) temperature_signed_magnitude;
            }
-           hmd_ctx.hamb_percent = (uint8_t) humidity;
+           hmd_ctx.humidity_percent = (uint8_t) humidity;
         }
     }
 #endif
@@ -638,8 +638,8 @@ static void _HMD_update_air_quality(void) {
     ENS16X_status_t ens16x_status = ENS16X_SUCCESS;
     LPTIM_status_t lptim_status = LPTIM_SUCCESS;
     ENS16X_air_quality_data_t air_quality_data;
-    int32_t tamb_tenth_degrees = ((hmd_ctx.tamb_tenth_degrees != SIGFOX_EP_ERROR_VALUE_TEMPERATURE) ? hmd_ctx.tamb_tenth_degrees : 25);;
-    int32_t hamb_percent = ((hmd_ctx.hamb_percent != SIGFOX_EP_ERROR_VALUE_HUMIDITY) ? hmd_ctx.hamb_percent : 50);
+    int32_t temperature_tenth_degrees = ((hmd_ctx.temperature_tenth_degrees != SIGFOX_EP_ERROR_VALUE_TEMPERATURE) ? hmd_ctx.temperature_tenth_degrees : 25);;
+    int32_t humidity_percent = ((hmd_ctx.humidity_percent != SIGFOX_EP_ERROR_VALUE_HUMIDITY) ? hmd_ctx.humidity_percent : 50);
     uint32_t acquisition_time_min_ms = 0;
     // Reset data.
     hmd_ctx.air_quality_data.tvoc_ppb = SIGFOX_EP_ERROR_VALUE_TVOC;
@@ -667,7 +667,7 @@ static void _HMD_update_air_quality(void) {
         acquisition_time_min_ms = HMD_AIR_QUALITY_ACQUISITION_TIME_MIN_MS;
     }
     // Set RHT compensation.
-    ens16x_status = ENS16X_set_temperature_humidity(I2C_ADDRESS_ENS16X, tamb_tenth_degrees, hamb_percent);
+    ens16x_status = ENS16X_set_temperature_humidity(I2C_ADDRESS_ENS16X, temperature_tenth_degrees, humidity_percent);
     ENS16X_stack_error(ERROR_BASE_ENS16X);
     // Directly exit in case of POR.
     if (hmd_ctx.state == HMD_STATE_STARTUP) goto errors;
@@ -895,10 +895,10 @@ int main(void) {
             hmd_ctx.status.lse_status = (generic_u8 == 0) ? 0b0 : 0b1;
             // Build frame.
             sigfox_ep_ul_payload_monitoring.status = hmd_ctx.status.all;
-            sigfox_ep_ul_payload_monitoring.vbatt_mv = hmd_ctx.vbatt_mv;
+            sigfox_ep_ul_payload_monitoring.storage_voltage_mv = hmd_ctx.storage_voltage_mv;
             sigfox_ep_ul_payload_monitoring.unused = 0;
-            sigfox_ep_ul_payload_monitoring.tamb_tenth_degrees = hmd_ctx.tamb_tenth_degrees;
-            sigfox_ep_ul_payload_monitoring.hamb_percent = hmd_ctx.hamb_percent;
+            sigfox_ep_ul_payload_monitoring.temperature_tenth_degrees = hmd_ctx.temperature_tenth_degrees;
+            sigfox_ep_ul_payload_monitoring.humidity_percent = hmd_ctx.humidity_percent;
             // Send uplink monitoring frame.
             sigfox_ep_application_message.ul_payload = (sfx_u8*) (sigfox_ep_ul_payload_monitoring.frame);
             sigfox_ep_application_message.ul_payload_size_bytes = SIGFOX_EP_UL_PAYLOAD_SIZE_MONITORING;
@@ -918,14 +918,14 @@ int main(void) {
             // Turn sensors off.
             POWER_disable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_ANALOG);
             // Compute LED color.
-            if (hmd_ctx.vbatt_mv == SIGFOX_EP_ERROR_VALUE_ANALOG_16BITS) {
+            if (hmd_ctx.storage_voltage_mv == SIGFOX_EP_ERROR_VALUE_STORAGE_VOLTAGE) {
                 led_color = LED_COLOR_OFF;
             }
             else {
-                for (generic_u8 = 0; generic_u8 < HMD_VBATT_INDICATOR_RANGE; generic_u8++) {
-                    if (hmd_ctx.vbatt_mv >= HMD_VBATT_INDICATOR[generic_u8].threshold_mv) {
+                for (generic_u8 = 0; generic_u8 < HMD_STORAGE_VOLTAGE_INDICATOR_RANGE; generic_u8++) {
+                    if (hmd_ctx.storage_voltage_mv >= HMD_STORAGE_VOLTAGE_INDICATOR[generic_u8].threshold_mv) {
                         // Turn LED on.
-                        led_color = HMD_VBATT_INDICATOR[generic_u8].led_color;
+                        led_color = HMD_STORAGE_VOLTAGE_INDICATOR[generic_u8].led_color;
                         break;
                     }
                 }
@@ -934,7 +934,7 @@ int main(void) {
             led_status = LED_set_color(led_color);
             LED_stack_error(ERROR_BASE_LED);
             // Delay.
-            lptim_status = LPTIM_delay_milliseconds(HMD_VBATT_INDICATOR_DELAY_MS, LPTIM_DELAY_MODE_STOP);
+            lptim_status = LPTIM_delay_milliseconds(HMD_STORAGE_VOLTAGE_INDICATOR_DELAY_MS, LPTIM_DELAY_MODE_STOP);
             LPTIM_stack_error(ERROR_BASE_LPTIM);
             // Turn LED off.
             led_status = LED_set_color(LED_COLOR_OFF);

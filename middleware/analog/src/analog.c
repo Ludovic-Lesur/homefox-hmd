@@ -15,24 +15,24 @@
 
 /*** ANALOG local macros ***/
 
-#define ANALOG_DIVIDER_RATIO_VBATT      2
+#define ANALOG_MCU_VOLTAGE_MV_DEFAULT           3000
+#define ANALOG_MCU_TEMPERATURE_DEGREES_DEFAULT  25
 
-#define ANALOG_VMCU_MV_DEFAULT          3000
-#define ANALOG_TMCU_DEGREES_DEFAULT     25
+#define ANALOG_DIVIDER_RATIO_STORAGE_VOLTAGE    2
 
-#define ANALOG_ERROR_VALUE              0xFFFF
+#define ANALOG_ERROR_VALUE                      0xFFFF
 
 /*** ANALOG local structures ***/
 
 /*******************************************************************/
 typedef struct {
-    int32_t vmcu_mv;
+    int32_t mcu_voltage_mv;
 } ANALOG_context_t;
 
 /*** ANALOG local global variables ***/
 
 static ANALOG_context_t analog_ctx = {
-    .vmcu_mv = ANALOG_VMCU_MV_DEFAULT
+    .mcu_voltage_mv = ANALOG_MCU_VOLTAGE_MV_DEFAULT
 };
 
 /*** ANALOG functions ***/
@@ -43,7 +43,7 @@ ANALOG_status_t ANALOG_init(void) {
     ANALOG_status_t status = ANALOG_SUCCESS;
     ADC_status_t adc_status = ADC_SUCCESS;
     // Init context.
-    analog_ctx.vmcu_mv = ANALOG_VMCU_MV_DEFAULT;
+    analog_ctx.mcu_voltage_mv = ANALOG_MCU_VOLTAGE_MV_DEFAULT;
     // Init internal ADC.
     adc_status = ADC_init(&ADC_GPIO);
     ADC_exit_error(ANALOG_ERROR_BASE_ADC);
@@ -75,30 +75,30 @@ ANALOG_status_t ANALOG_convert_channel(ANALOG_channel_t channel, int32_t* analog
     }
     // Check channel.
     switch (channel) {
-    case ANALOG_CHANNEL_VMCU_MV:
+    case ANALOG_CHANNEL_MCU_VOLTAGE_MV:
         // MCU voltage.
         adc_status = ADC_convert_channel(ADC_CHANNEL_VREFINT, &adc_data_12bits);
         ADC_exit_error(ANALOG_ERROR_BASE_ADC);
         // Convert to mV.
-        adc_status = ADC_compute_vmcu(adc_data_12bits, ADC_get_vrefint_voltage_mv(), analog_data);
+        adc_status = ADC_compute_mcu_voltage(adc_data_12bits, ADC_get_vrefint_voltage_mv(), analog_data);
         ADC_exit_error(ANALOG_ERROR_BASE_ADC);
         // Update local value for temperature computation.
-        analog_ctx.vmcu_mv = (*analog_data);
+        analog_ctx.mcu_voltage_mv = (*analog_data);
         break;
-    case ANALOG_CHANNEL_TMCU_DEGREES:
+    case ANALOG_CHANNEL_MCU_TEMPERATURE_DEGREES:
         // MCU temperature.
         adc_status = ADC_convert_channel(ADC_CHANNEL_TEMPERATURE_SENSOR, &adc_data_12bits);
         ADC_exit_error(ANALOG_ERROR_BASE_ADC);
         // Convert to degrees.
-        adc_status = ADC_compute_tmcu(analog_ctx.vmcu_mv, adc_data_12bits, analog_data);
+        adc_status = ADC_compute_mcu_temperature(analog_ctx.mcu_voltage_mv, adc_data_12bits, analog_data);
         ADC_exit_error(ANALOG_ERROR_BASE_ADC);
         break;
-    case ANALOG_CHANNEL_VBATT_MV:
+    case ANALOG_CHANNEL_STORAGE_VOLTAGE_MV:
         // Bus voltage.
-        adc_status = ADC_convert_channel(ADC_CHANNEL_VBATT, &adc_data_12bits);
+        adc_status = ADC_convert_channel(ADC_CHANNEL_STORAGE_VOLTAGE, &adc_data_12bits);
         ADC_exit_error(ANALOG_ERROR_BASE_ADC);
         // Convert to mV.
-        (*analog_data) = (adc_data_12bits * analog_ctx.vmcu_mv * ANALOG_DIVIDER_RATIO_VBATT) / (ADC_FULL_SCALE);
+        (*analog_data) = (adc_data_12bits * analog_ctx.mcu_voltage_mv * ANALOG_DIVIDER_RATIO_STORAGE_VOLTAGE) / (ADC_FULL_SCALE);
         break;
     default:
         status = ANALOG_ERROR_CHANNEL;

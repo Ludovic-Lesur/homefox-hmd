@@ -16,15 +16,15 @@
 
 /*** MCU MAPPING macros ***/
 
-#define ADC_CHANNEL_VBATT       ADC_CHANNEL_IN1
+#define ADC_CHANNEL_STORAGE_VOLTAGE     ADC_CHANNEL_IN1
 
-#define I2C_INSTANCE_SENSORS    I2C_INSTANCE_I2C1
+#define I2C_INSTANCE_SENSORS            I2C_INSTANCE_I2C1
 
-#define SPI_INSTANCE_RADIO      SPI_INSTANCE_SPI1
+#define SPI_INSTANCE_RADIO              SPI_INSTANCE_SPI1
 
-#define TIM_INSTANCE_MCU_API    TIM_INSTANCE_TIM2
+#define TIM_INSTANCE_MCU_API            TIM_INSTANCE_TIM2
 
-#define USART_INSTANCE_AT       USART_INSTANCE_USART1
+#define USART_INSTANCE_AT               USART_INSTANCE_USART1
 
 /*** MCU MAPPING structures ***/
 
@@ -33,7 +33,7 @@
  * \brief ADC channels index.
  *******************************************************************/
 typedef enum {
-    ADC_CHANNEL_INDEX_VBATT_MEASURE = 0,
+    ADC_CHANNEL_INDEX_STORAGE_VOLTAGE = 0,
     ADC_CHANNEL_INDEX_LAST
 } ADC_channel_index_t;
 
