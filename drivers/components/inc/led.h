@@ -20,7 +20,7 @@
  *******************************************************************/
 typedef enum {
     // Driver errors.
-    LED_SUCCESS,
+    LED_SUCCESS = 0,
     LED_ERROR_COLOR,
     LED_ERROR_ACTIVITY,
     // Last base value.

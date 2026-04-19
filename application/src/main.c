@@ -77,7 +77,7 @@
 
 /*******************************************************************/
 typedef enum {
-    HMD_STATE_STARTUP,
+    HMD_STATE_STARTUP = 0,
     HMD_STATE_MONITORING,
     HMD_STATE_BUTTON,
     HMD_STATE_AIR_QUALITY,
@@ -753,6 +753,8 @@ static void _HMD_send_sigfox_message(SIGFOX_EP_API_application_message_t* sigfox
 #endif
     // Library configuration.
     lib_config.rc = &sigfox_rc1_custom;
+    // Reload watchdog.
+    IWDG_reload();
     // Open library.
     sigfox_ep_api_status = SIGFOX_EP_API_open(&lib_config);
     SIGFOX_EP_API_check_status(0);

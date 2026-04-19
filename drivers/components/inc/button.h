@@ -20,7 +20,7 @@
  *******************************************************************/
 typedef enum {
     // Driver errors.
-    BUTTON_SUCCESS,
+    BUTTON_SUCCESS = 0,
     // Last base value.
     BUTTON_ERROR_BASE_LAST = ERROR_BASE_STEP
 } BUTTON_status_t;
