@@ -733,7 +733,6 @@ static void _HMD_send_sigfox_message(SIGFOX_EP_API_application_message_t* sigfox
     SIGFOX_EP_API_config_t lib_config;
     SIGFOX_EP_API_message_status_t message_status;
     SIGFOX_EP_dl_payload_t dl_payload;
-    SIGFOX_rc_t sigfox_rc1_custom;
     HMD_timings_t timings;
     HMD_led_color_t led_color;
     int16_t dl_rssi = 0;
@@ -742,17 +741,8 @@ static void _HMD_send_sigfox_message(SIGFOX_EP_API_application_message_t* sigfox
     if (hmd_ctx.flags.radio_enabled == 0) goto errors;
     // Check downlink request.
     (sigfox_ep_application_message->bidirectional_flag) = ((hmd_ctx.flags.downlink_request != 0) ? SIGFOX_TRUE : SIGFOX_FALSE);
-    // Build custom RC structure.
-    sigfox_rc1_custom.f_ul_hz = SIGFOX_RC1.f_ul_hz;
-    sigfox_rc1_custom.f_dl_hz = SIGFOX_RC1.f_dl_hz;
-    sigfox_rc1_custom.epsilon_hz = (HMD_SIGFOX_RC1_EPSILON_SNW_HZ + HMD_SIGFOX_RC1_EPSILON_EP_HZ);
-    sigfox_rc1_custom.spectrum_access = SIGFOX_RC1.spectrum_access;
-#ifdef SIGFOX_EP_PARAMETERS_CHECK
-    sigfox_rc1_custom.uplink_bit_rate_capability = SIGFOX_RC1.uplink_bit_rate_capability;
-    sigfox_rc1_custom.tx_power_dbm_eirp_max = SIGFOX_RC1.tx_power_dbm_eirp_max;
-#endif
     // Library configuration.
-    lib_config.rc = &sigfox_rc1_custom;
+    lib_config.rc = &SIGFOX_RC1;
     // Reload watchdog.
     IWDG_reload();
     // Open library.
