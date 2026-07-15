@@ -69,10 +69,6 @@
 // Accelerometer.
 #define HMD_ACCELEROMETER_BLANKING_TIME_SECONDS_DEFAULT     60
 #define HMD_ACCELEROMETER_BLANKING_TIME_SECONDS_MAX         17280
-// Sigfox oscillator accuracy.
-#define HMD_SIGFOX_RC1_EPSILON_SNW_HZ                       1410
-#define HMD_SIGFOX_RC1_EPSILON_EP_HZ                        4340
-
 /*** MAIN local structures ***/
 
 /*******************************************************************/
