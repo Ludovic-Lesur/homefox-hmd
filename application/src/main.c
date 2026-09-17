@@ -45,7 +45,7 @@
 #define HMD_MONITORING_PERIOD_MINUTES_DEFAULT               30
 #define HMD_MONITORING_PERIOD_MINUTES_MAX                   MATH_MINUTES_PER_WEEK
 // Downlink period.
-#define HMD_DOWNLINK_PERIOD_SECONDS                         MATH_SECONDS_PER_DAY
+#define HMD_CONFIGURATION_PERIOD_SECONDS                    (MATH_SECONDS_PER_DAY + MATH_SECONDS_PER_HOUR)
 // Error stack.
 #define HMD_ERROR_STACK_BLANKING_TIME_SECONDS               MATH_SECONDS_PER_DAY
 // Voltage hysteresis for radio.
@@ -111,7 +111,7 @@ typedef union {
     struct {
         unsigned radio_enabled : 1;
         unsigned reset_request :1;
-        unsigned downlink_request :1;
+        unsigned configuration_request :1;
         unsigned air_quality_request :1;
         unsigned button_request :1;
         unsigned error_stack_enable :1;
@@ -159,7 +159,7 @@ typedef struct {
     uint16_t temperature_tenth_degrees;
     uint8_t humidity_percent;
     // Downlink.
-    uint32_t downlink_last_time_seconds;
+    uint32_t configuration_last_time_seconds;
     HMD_configuration_t configuration;
     // Error stack.
     uint32_t error_stack_last_time_seconds;
@@ -479,10 +479,10 @@ static void _HMD_init_context(void) {
     hmd_ctx.status.all = 0;
     hmd_ctx.flags.all = 0;
     hmd_ctx.flags.radio_enabled = 1;
-    hmd_ctx.flags.downlink_request = 1;
+    hmd_ctx.flags.configuration_request = 1;
     hmd_ctx.flags.error_stack_enable = 1;
     hmd_ctx.monitoring_last_time_seconds = 0;
-    hmd_ctx.downlink_last_time_seconds = 0;
+    hmd_ctx.configuration_last_time_seconds = 0;
     hmd_ctx.error_stack_last_time_seconds = 0;
     hmd_ctx.storage_voltage_mv = SIGFOX_EP_ERROR_VALUE_STORAGE_VOLTAGE;
     hmd_ctx.temperature_tenth_degrees = SIGFOX_EP_ERROR_VALUE_TEMPERATURE;
@@ -762,8 +762,8 @@ static void _HMD_send_sigfox_message(SIGFOX_EP_API_application_message_t* sigfox
     uint8_t configuration_status = 0;
     // Directly exit of the radio is disabled due to low battery voltage.
     if (hmd_ctx.flags.radio_enabled == 0) goto errors;
-    // Check downlink request.
-    (sigfox_ep_application_message->bidirectional_flag) = ((hmd_ctx.flags.downlink_request != 0) ? SIGFOX_TRUE : SIGFOX_FALSE);
+    // Check configuration request.
+    (sigfox_ep_application_message->bidirectional_flag) = ((hmd_ctx.flags.configuration_request != 0) ? SIGFOX_TRUE : SIGFOX_FALSE);
     // Library configuration.
     lib_config.rc = &SIGFOX_RC1;
     // Reload watchdog.
@@ -777,9 +777,9 @@ static void _HMD_send_sigfox_message(SIGFOX_EP_API_application_message_t* sigfox
     // Reload watchdog.
     IWDG_reload();
     // Check bidirectional flag.
-    if (hmd_ctx.flags.downlink_request != 0) {
+    if (hmd_ctx.flags.configuration_request != 0) {
         // Clear request and reset status.
-        hmd_ctx.flags.downlink_request = 0;
+        hmd_ctx.flags.configuration_request = 0;
         hmd_ctx.status.daily_downlink = 0;
         // Read message status.
         message_status = SIGFOX_EP_API_get_message_status();
@@ -1086,11 +1086,11 @@ int main(void) {
                hmd_ctx.flags.monitoring_request = 1;
                hmd_ctx.monitoring_last_time_seconds = generic_u32;
             }
-            // Periodic downlink.
-            if (generic_u32 >= (hmd_ctx.downlink_last_time_seconds + HMD_DOWNLINK_PERIOD_SECONDS)) {
+            // Periodic configuration.
+            if (generic_u32 >= (hmd_ctx.configuration_last_time_seconds + HMD_CONFIGURATION_PERIOD_SECONDS)) {
                // Set request and update last time.
-               hmd_ctx.flags.downlink_request = 1;
-               hmd_ctx.downlink_last_time_seconds = generic_u32;
+               hmd_ctx.flags.configuration_request = 1;
+               hmd_ctx.configuration_last_time_seconds = generic_u32;
             }
             // Error stack.
             if (generic_u32 >= (hmd_ctx.error_stack_last_time_seconds + HMD_ERROR_STACK_BLANKING_TIME_SECONDS)) {
