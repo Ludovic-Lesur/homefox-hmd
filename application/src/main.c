@@ -21,6 +21,7 @@
 #include "rtc.h"
 // Utils.
 #include "error.h"
+#include "maths.h"
 #include "types.h"
 // Components.
 #include "fxls89xxxx.h"
@@ -40,23 +41,23 @@
 /*** MAIN local macros ***/
 
 // Monitoring period.
-#define HMD_MONITORING_PERIOD_MINUTES_DEFAULT               30
 #define HMD_MONITORING_PERIOD_MINUTES_MIN                   10
-#define HMD_MONITORING_PERIOD_MINUTES_MAX                   10080
+#define HMD_MONITORING_PERIOD_MINUTES_DEFAULT               30
+#define HMD_MONITORING_PERIOD_MINUTES_MAX                   MATH_MINUTES_PER_WEEK
 // Downlink period.
-#define HMD_DOWNLINK_PERIOD_SECONDS                         86400
+#define HMD_DOWNLINK_PERIOD_SECONDS                         MATH_SECONDS_PER_DAY
 // Error stack.
-#define HMD_ERROR_STACK_BLANKING_TIME_SECONDS               86400
+#define HMD_ERROR_STACK_BLANKING_TIME_SECONDS               MATH_SECONDS_PER_DAY
 // Voltage hysteresis for radio.
 #define HMD_RADIO_ON_STORAGE_VOLTAGE_THRESHOLD_MV           3700
 #define HMD_RADIO_OFF_STORAGE_VOLTAGE_THRESHOLD_MV          3500
-// STORAGE_VOLTAGE indicator.
+// Storage voltage indicator.
 #define HMD_STORAGE_VOLTAGE_INDICATOR_RANGE                 7
 #define HMD_STORAGE_VOLTAGE_INDICATOR_DELAY_MS              3000
 // Air quality.
-#define HMD_AIR_QUALITY_PERIOD_MINUTES_DEFAULT              30
 #define HMD_AIR_QUALITY_PERIOD_MINUTES_MIN                  10
-#define HMD_AIR_QUALITY_PERIOD_MINUTES_MAX                  10080
+#define HMD_AIR_QUALITY_PERIOD_MINUTES_DEFAULT              30
+#define HMD_AIR_QUALITY_PERIOD_MINUTES_MAX                  MATH_MINUTES_PER_WEEK
 #define HMD_AIR_QUALITY_ACQUISITION_DELAY_MS                10000
 #define HMD_AIR_QUALITY_ACQUISITION_LED_BLINK_MS            100
 #define HMD_AIR_QUALITY_ACQUISITION_TIME_MIN_MS             120000
@@ -67,8 +68,13 @@
 #define HMD_AIR_QUALITY_ACQUISITION_MODE                    ENS16X_OPERATING_MODE_STANDARD
 #endif
 // Accelerometer.
-#define HMD_ACCELEROMETER_BLANKING_TIME_SECONDS_DEFAULT     60
-#define HMD_ACCELEROMETER_BLANKING_TIME_SECONDS_MAX         17280
+#define HMD_ACCELEROMETER_BLANKING_TIME_SECONDS_DEFAULT     MATH_SECONDS_PER_MINUTE
+#define HMD_ACCELEROMETER_BLANKING_TIME_SECONDS_MAX         (6 * MATH_SECONDS_PER_HOUR)
+// LED color.
+#define HMD_LED_COLOR_MIN                                   LED_COLOR_OFF
+#define HMD_LED_COLOR_MAX                                   (LED_COLOR_LAST - 1)
+#define HMD_LED_COLOR_NVM_OFFSET                            0x55
+
 /*** MAIN local structures ***/
 
 /*******************************************************************/
@@ -88,7 +94,7 @@ typedef enum {
 typedef union {
     uint8_t all;
     struct {
-        unsigned unused :1;
+        unsigned configuration_updated :1;
         unsigned daily_downlink :1;
         unsigned lse_status :1;
         unsigned lsi_status :1;
@@ -131,6 +137,12 @@ typedef struct {
 
 /*******************************************************************/
 typedef struct {
+    HMD_timings_t timings;
+    HMD_led_color_t led_color;
+} HMD_configuration_t;
+
+/*******************************************************************/
+typedef struct {
     int32_t threshold_mv;
     LED_color_t led_color;
 } HMD_storage_voltage_indicator_t;
@@ -148,8 +160,7 @@ typedef struct {
     uint8_t humidity_percent;
     // Downlink.
     uint32_t downlink_last_time_seconds;
-    HMD_timings_t timings;
-    HMD_led_color_t led_color;
+    HMD_configuration_t configuration;
     // Error stack.
     uint32_t error_stack_last_time_seconds;
 #ifdef HMD_AIR_QUALITY_ENABLE
@@ -197,88 +208,80 @@ static void _HMD_button_irq_callback(void) {
 static void _HMD_load_timings(void) {
     // Local variables.
     NVM_status_t nvm_status = NVM_SUCCESS;
-    uint8_t nvm_byte = 0;
-    uint16_t generic_u16 = 0;
+    uint16_t nvm_short = 0;
     // Read monitoring period.
-    nvm_status = NVM_read_byte((NVM_ADDRESS_MONITORING_PERIOD_MINUTES + 0), &nvm_byte);
+    nvm_status = NVM_read(NVM_ADDRESS_MONITORING_PERIOD_MINUTES, &nvm_short, 1, NVM_DATA_TYPE_SHORT);
     NVM_stack_error(ERROR_BASE_NVM);
-    generic_u16 = (nvm_byte << 8);
-    nvm_status = NVM_read_byte((NVM_ADDRESS_MONITORING_PERIOD_MINUTES + 1), &nvm_byte);
-    NVM_stack_error(ERROR_BASE_NVM);
-    generic_u16 |= nvm_byte;
     // Check value.
-    if ((generic_u16 < HMD_MONITORING_PERIOD_MINUTES_MIN) || (generic_u16 > HMD_MONITORING_PERIOD_MINUTES_MAX)) {
+    if ((nvm_short < HMD_MONITORING_PERIOD_MINUTES_MIN) || (nvm_short > HMD_MONITORING_PERIOD_MINUTES_MAX)) {
         // Reset to default value.
-        generic_u16 = HMD_MONITORING_PERIOD_MINUTES_DEFAULT;
+        nvm_short = HMD_MONITORING_PERIOD_MINUTES_DEFAULT;
+        ERROR_stack_add(ERROR_NVM_MONITORING_PERIOD);
     }
-    hmd_ctx.timings.monitoring_period_minutes = generic_u16;
+    hmd_ctx.configuration.timings.monitoring_period_minutes = nvm_short;
 #ifdef HMD_AIR_QUALITY_ENABLE
     // Read air quality period.
-    nvm_status = NVM_read_byte((NVM_ADDRESS_AIR_QUALITY_PERIOD_MINUTES + 0), &nvm_byte);
+    nvm_short = 0;
+    nvm_status = NVM_read(NVM_ADDRESS_AIR_QUALITY_PERIOD_MINUTES, &nvm_short, 1, NVM_DATA_TYPE_SHORT);
     NVM_stack_error(ERROR_BASE_NVM);
-    generic_u16 = (nvm_byte << 8);
-    nvm_status = NVM_read_byte((NVM_ADDRESS_AIR_QUALITY_PERIOD_MINUTES + 1), &nvm_byte);
-    NVM_stack_error(ERROR_BASE_NVM);
-    generic_u16 |= nvm_byte;
     // Check value.
-    if ((generic_u16 < HMD_AIR_QUALITY_PERIOD_MINUTES_MIN) || (generic_u16 > HMD_AIR_QUALITY_PERIOD_MINUTES_MAX)) {
+    if ((nvm_short < HMD_AIR_QUALITY_PERIOD_MINUTES_MIN) || (nvm_short > HMD_AIR_QUALITY_PERIOD_MINUTES_MAX)) {
         // Reset to default value.
-        generic_u16 = HMD_AIR_QUALITY_PERIOD_MINUTES_DEFAULT;
+        nvm_short = HMD_AIR_QUALITY_PERIOD_MINUTES_DEFAULT;
+        ERROR_stack_add(ERROR_NVM_AIR_QUALITY_PERIOD);
     }
-    hmd_ctx.timings.air_quality_period_minutes = generic_u16;
+    hmd_ctx.configuration.timings.air_quality_period_minutes = nvm_short;
 #endif
 #ifdef HMD_ACCELEROMETER_ENABLE
     // Read accelerometer blanking time.
-    nvm_status = NVM_read_byte((NVM_ADDRESS_ACCELEROMETER_BLANKING_TIME_SECONDS + 0), &nvm_byte);
+    nvm_short = 0;
+    nvm_status = NVM_read(NVM_ADDRESS_ACCELEROMETER_BLANKING_TIME_SECONDS, &nvm_short, 1, NVM_DATA_TYPE_SHORT);
     NVM_stack_error(ERROR_BASE_NVM);
-    generic_u16 = (nvm_byte << 8);
-    nvm_status = NVM_read_byte((NVM_ADDRESS_ACCELEROMETER_BLANKING_TIME_SECONDS + 1), &nvm_byte);
-    NVM_stack_error(ERROR_BASE_NVM);
-    generic_u16 |= nvm_byte;
     // Check value.
-    if (generic_u16 > HMD_ACCELEROMETER_BLANKING_TIME_SECONDS_MAX) {
+    if (nvm_short > HMD_ACCELEROMETER_BLANKING_TIME_SECONDS_MAX) {
        // Reset to default value.
-       generic_u16 = HMD_ACCELEROMETER_BLANKING_TIME_SECONDS_DEFAULT;
+        nvm_short = HMD_ACCELEROMETER_BLANKING_TIME_SECONDS_DEFAULT;
+        ERROR_stack_add(ERROR_NVM_ACCELEROMETER_BLANKING_TIME);
     }
-    hmd_ctx.timings.accelerometer_blanking_time_seconds = generic_u16;
+    hmd_ctx.configuration.timings.accelerometer_blanking_time_seconds = nvm_short;
 #endif
 }
 #endif
 
 #ifndef HMD_MODE_CLI
 /*******************************************************************/
-static void _HMD_store_timings(HMD_timings_t* timings) {
+static void _HMD_store_timings(HMD_timings_t* timings, uint8_t* configuration_status) {
     // Local variables.
     NVM_status_t nvm_status = NVM_SUCCESS;
     uint16_t generic_u16 = 0;
+    // Set status to success by default.
+    (*configuration_status) = 1;
     // Monitoring period.
     generic_u16 = (timings->monitoring_period_minutes);
     if ((generic_u16 >= HMD_MONITORING_PERIOD_MINUTES_MIN) || (generic_u16 <= HMD_MONITORING_PERIOD_MINUTES_MAX)) {
         // Update context.
-        hmd_ctx.timings.monitoring_period_minutes = generic_u16;
+        hmd_ctx.configuration.timings.monitoring_period_minutes = generic_u16;
         // Write new value in NVM.
-        nvm_status = NVM_write_byte((NVM_ADDRESS_MONITORING_PERIOD_MINUTES + 0), (uint8_t) (generic_u16 >> 8));
-        NVM_stack_error(ERROR_BASE_NVM);
-        nvm_status = NVM_write_byte((NVM_ADDRESS_MONITORING_PERIOD_MINUTES + 1), (uint8_t) (generic_u16 >> 0));
+        nvm_status = NVM_write(NVM_ADDRESS_MONITORING_PERIOD_MINUTES, &generic_u16, 1, NVM_DATA_TYPE_SHORT);
         NVM_stack_error(ERROR_BASE_NVM);
     }
     else {
         ERROR_stack_add(ERROR_SIGFOX_EP_DL_MONITORING_PERIOD);
+        (*configuration_status) = 0;
     }
 #ifdef HMD_AIR_QUALITY_ENABLE
     // Air quality period.
     generic_u16 = (timings->air_quality_period_minutes);
     if ((generic_u16 >= HMD_AIR_QUALITY_PERIOD_MINUTES_MIN) || (generic_u16 <= HMD_AIR_QUALITY_PERIOD_MINUTES_MAX)) {
         // Update context.
-        hmd_ctx.timings.air_quality_period_minutes = generic_u16;
+        hmd_ctx.configuration.timings.air_quality_period_minutes = generic_u16;
         // Write new value in NVM.
-        nvm_status = NVM_write_byte((NVM_ADDRESS_AIR_QUALITY_PERIOD_MINUTES + 0), (uint8_t) (generic_u16 >> 8));
-        NVM_stack_error(ERROR_BASE_NVM);
-        nvm_status = NVM_write_byte((NVM_ADDRESS_AIR_QUALITY_PERIOD_MINUTES + 1), (uint8_t) (generic_u16 >> 0));
+        nvm_status = NVM_write(NVM_ADDRESS_AIR_QUALITY_PERIOD_MINUTES, &generic_u16, 1, NVM_DATA_TYPE_SHORT);
         NVM_stack_error(ERROR_BASE_NVM);
     }
     else {
         ERROR_stack_add(ERROR_SIGFOX_EP_DL_AIR_QUALITY_PERIOD);
+        (*configuration_status) = 0;
     }
 #endif
 #ifdef HMD_ACCELEROMETER_ENABLE
@@ -286,15 +289,14 @@ static void _HMD_store_timings(HMD_timings_t* timings) {
     generic_u16 = (timings->accelerometer_blanking_time_seconds);
     if (generic_u16 <= HMD_ACCELEROMETER_BLANKING_TIME_SECONDS_MAX) {
         // Update context.
-        hmd_ctx.timings.accelerometer_blanking_time_seconds = generic_u16;
+        hmd_ctx.configuration.timings.accelerometer_blanking_time_seconds = generic_u16;
         // Write new value in NVM.
-        nvm_status = NVM_write_byte((NVM_ADDRESS_ACCELEROMETER_BLANKING_TIME_SECONDS + 0), (uint8_t) (generic_u16 >> 8));
-        NVM_stack_error(ERROR_BASE_NVM);
-        nvm_status = NVM_write_byte((NVM_ADDRESS_ACCELEROMETER_BLANKING_TIME_SECONDS + 1), (uint8_t) (generic_u16 >> 0));
+        nvm_status = NVM_write(NVM_ADDRESS_ACCELEROMETER_BLANKING_TIME_SECONDS, &generic_u16, 1, NVM_DATA_TYPE_SHORT);
         NVM_stack_error(ERROR_BASE_NVM);
     }
     else {
         ERROR_stack_add(ERROR_SIGFOX_EP_DL_ACCELEROMETER_BLANKING_TIME);
+        (*configuration_status) = 0;
     }
 #endif
 }
@@ -307,141 +309,163 @@ static void _HMD_load_led_color(void) {
     NVM_status_t nvm_status = NVM_SUCCESS;
     uint8_t nvm_byte = 0;
     // Read Sigfox uplink color.
-    nvm_status = NVM_read_byte(NVM_ADDRESS_LED_COLOR_SIGFOX_UPLINK, &nvm_byte);
+    nvm_status = NVM_read(NVM_ADDRESS_LED_COLOR_SIGFOX_UPLINK, &nvm_byte, 1, NVM_DATA_TYPE_BYTE);
     NVM_stack_error(ERROR_BASE_NVM);
     // Check value.
-    if (nvm_byte >= LED_COLOR_LAST) {
+    if ((nvm_byte < (HMD_LED_COLOR_NVM_OFFSET + HMD_LED_COLOR_MIN)) || (nvm_byte > (HMD_LED_COLOR_NVM_OFFSET + HMD_LED_COLOR_MAX))) {
         // Reset to default value.
-        nvm_byte = LED_COLOR_BLUE;
+        nvm_byte = (HMD_LED_COLOR_NVM_OFFSET + LED_COLOR_BLUE);
+        ERROR_stack_add(ERROR_NVM_LED_COLOR_SIGFOX_UPLINK);
     }
-    hmd_ctx.led_color.sigfox_uplink = ((LED_color_t) nvm_byte);
+    hmd_ctx.configuration.led_color.sigfox_uplink = (LED_color_t) (nvm_byte - HMD_LED_COLOR_NVM_OFFSET);
     // Read Sigfox downlink color.
-    nvm_status = NVM_read_byte(NVM_ADDRESS_LED_COLOR_SIGFOX_DOWNLINK, &nvm_byte);
+    nvm_byte = 0;
+    nvm_status = NVM_read(NVM_ADDRESS_LED_COLOR_SIGFOX_DOWNLINK, &nvm_byte, 1, NVM_DATA_TYPE_BYTE);
     NVM_stack_error(ERROR_BASE_NVM);
     // Check value.
-    if (nvm_byte >= LED_COLOR_LAST) {
+    if ((nvm_byte < (HMD_LED_COLOR_NVM_OFFSET + HMD_LED_COLOR_MIN)) || (nvm_byte > (HMD_LED_COLOR_NVM_OFFSET + HMD_LED_COLOR_MAX))) {
        // Reset to default value.
-       nvm_byte = LED_COLOR_CYAN;
+       nvm_byte = (HMD_LED_COLOR_NVM_OFFSET + LED_COLOR_CYAN);
+       ERROR_stack_add(ERROR_NVM_LED_COLOR_SIGFOX_DOWNLINK);
     }
-    hmd_ctx.led_color.sigfox_downlink = ((LED_color_t) nvm_byte);
+    hmd_ctx.configuration.led_color.sigfox_downlink = (LED_color_t) (nvm_byte - HMD_LED_COLOR_NVM_OFFSET);
     // Read temperature and humidity reading color.
-    nvm_status = NVM_read_byte(NVM_ADDRESS_LED_COLOR_TEMPERATURE_HUMIDITY_READING, &nvm_byte);
+    nvm_byte = 0;
+    nvm_status = NVM_read(NVM_ADDRESS_LED_COLOR_TEMPERATURE_HUMIDITY_READING, &nvm_byte, 1, NVM_DATA_TYPE_BYTE);
     NVM_stack_error(ERROR_BASE_NVM);
     // Check value.
-    if (nvm_byte >= LED_COLOR_LAST) {
+    if ((nvm_byte < (HMD_LED_COLOR_NVM_OFFSET + HMD_LED_COLOR_MIN)) || (nvm_byte > (HMD_LED_COLOR_NVM_OFFSET + HMD_LED_COLOR_MAX))) {
         // Reset to default value.
-        nvm_byte = LED_COLOR_GREEN;
+        nvm_byte = (HMD_LED_COLOR_NVM_OFFSET + LED_COLOR_GREEN);
+        ERROR_stack_add(ERROR_NVM_LED_COLOR_TEMPERATURE_HUMIDITY_READING);
     }
-    hmd_ctx.led_color.temperature_humidity_reading = ((LED_color_t) nvm_byte);
+    hmd_ctx.configuration.led_color.temperature_humidity_reading = (LED_color_t) (nvm_byte - HMD_LED_COLOR_NVM_OFFSET);
 #ifdef HMD_AIR_QUALITY_ENABLE
     // Read air quality reading color.
-    nvm_status = NVM_read_byte(NVM_ADDRESS_LED_COLOR_AIR_QUALITY_READING, &nvm_byte);
+    nvm_byte = 0;
+    nvm_status = NVM_read(NVM_ADDRESS_LED_COLOR_AIR_QUALITY_READING, &nvm_byte, 1, NVM_DATA_TYPE_BYTE);
     NVM_stack_error(ERROR_BASE_NVM);
     // Check value.
-    if (nvm_byte >= LED_COLOR_LAST) {
+    if ((nvm_byte < (HMD_LED_COLOR_NVM_OFFSET + HMD_LED_COLOR_MIN)) || (nvm_byte > (HMD_LED_COLOR_NVM_OFFSET + HMD_LED_COLOR_MAX))) {
         // Reset to default value.
-        nvm_byte = LED_COLOR_YELLOW;
+        nvm_byte = (HMD_LED_COLOR_NVM_OFFSET + LED_COLOR_YELLOW);
+        ERROR_stack_add(ERROR_NVM_LED_COLOR_AIR_QUALITY_READING);
     }
-    hmd_ctx.led_color.air_quality_reading = ((LED_color_t) nvm_byte);
+    hmd_ctx.configuration.led_color.air_quality_reading = (LED_color_t) (nvm_byte - HMD_LED_COLOR_NVM_OFFSET);
 #endif
 #ifdef HMD_ACCELEROMETER_ENABLE
     // Read accelerometer reading color.
-    nvm_status = NVM_read_byte(NVM_ADDRESS_LED_COLOR_ACCELEROMETER_READING, &nvm_byte);
+    nvm_byte = 0;
+    nvm_status = NVM_read(NVM_ADDRESS_LED_COLOR_ACCELEROMETER_READING, &nvm_byte, 1, NVM_DATA_TYPE_BYTE);
     NVM_stack_error(ERROR_BASE_NVM);
     // Check value.
-    if (nvm_byte >= LED_COLOR_LAST) {
+    if ((nvm_byte < (HMD_LED_COLOR_NVM_OFFSET + HMD_LED_COLOR_MIN)) || (nvm_byte > (HMD_LED_COLOR_NVM_OFFSET + HMD_LED_COLOR_MAX))) {
         // Reset to default value.
-        nvm_byte = LED_COLOR_MAGENTA;
+        nvm_byte = (HMD_LED_COLOR_NVM_OFFSET + LED_COLOR_MAGENTA);
+        ERROR_stack_add(ERROR_NVM_LED_COLOR_ACCELEROMETER_READING);
     }
-    hmd_ctx.led_color.accelerometer_reading = ((LED_color_t) nvm_byte);
+    hmd_ctx.configuration.led_color.accelerometer_reading = (LED_color_t) (nvm_byte - HMD_LED_COLOR_NVM_OFFSET);
 #endif
 }
 #endif
 
 #ifndef HMD_MODE_CLI
 /*******************************************************************/
-static void _HMD_store_led_color(HMD_led_color_t* led_color) {
+static void _HMD_store_led_color(HMD_led_color_t* led_color, uint8_t* configuration_status) {
     // Local variables.
     NVM_status_t nvm_status = NVM_SUCCESS;
     LED_status_t led_status = LED_SUCCESS;
-    LED_color_t color = LED_COLOR_OFF;
+    LED_color_t color = 0;
+    uint8_t generic_u8 = 0;
+    // Set status to success by default.
+    (*configuration_status) = 1;
     // Sigfox uplink.
     color = (led_color->sigfox_uplink);
-    if (color < LED_COLOR_LAST) {
+    if (color <= HMD_LED_COLOR_MAX) {
         // Update context.
-        hmd_ctx.led_color.sigfox_uplink = color;
+        hmd_ctx.configuration.led_color.sigfox_uplink = color;
         // Update driver.
         led_status = LED_set_activity_color(LED_ACTIVITY_SIGFOX_UPLINK, color);
         LED_stack_error(ERROR_BASE_LED);
         // Write new value in NVM.
-        nvm_status = NVM_write_byte(NVM_ADDRESS_LED_COLOR_SIGFOX_UPLINK, ((uint8_t) color));
+        generic_u8 = (uint8_t) (color + HMD_LED_COLOR_NVM_OFFSET);
+        nvm_status = NVM_write(NVM_ADDRESS_LED_COLOR_SIGFOX_UPLINK, &generic_u8, 1, NVM_DATA_TYPE_BYTE);
         NVM_stack_error(ERROR_BASE_NVM);
     }
     else {
-        ERROR_stack_add(ERROR_SIGFOX_EP_DL_SIGFOX_UPLINK_COLOR);
+        ERROR_stack_add(ERROR_SIGFOX_EP_DL_LED_COLOR_SIGFOX_UPLINK);
+        (*configuration_status) = 0;
     }
     // Sigfox downlink.
     color = (led_color->sigfox_downlink);
-    if (color < LED_COLOR_LAST) {
+    if (color <= HMD_LED_COLOR_MAX) {
         // Update context.
-        hmd_ctx.led_color.sigfox_downlink = color;
+        hmd_ctx.configuration.led_color.sigfox_downlink = color;
         // Update driver.
         led_status = LED_set_activity_color(LED_ACTIVITY_SIGFOX_DOWNLINK, color);
         LED_stack_error(ERROR_BASE_LED);
         // Write new value in NVM.
-        nvm_status = NVM_write_byte(NVM_ADDRESS_LED_COLOR_SIGFOX_DOWNLINK, ((uint8_t) color));
+        generic_u8 = (uint8_t) (color + HMD_LED_COLOR_NVM_OFFSET);
+        nvm_status = NVM_write(NVM_ADDRESS_LED_COLOR_SIGFOX_DOWNLINK, &generic_u8, 1, NVM_DATA_TYPE_BYTE);
         NVM_stack_error(ERROR_BASE_NVM);
     }
     else {
-        ERROR_stack_add(ERROR_SIGFOX_EP_DL_SIGFOX_DOWNLINK_COLOR);
+        ERROR_stack_add(ERROR_SIGFOX_EP_DL_LED_COLOR_SIGFOX_DOWNLINK);
+        (*configuration_status) = 0;
     }
     // Temperature and humidity reading.
     color = (led_color->temperature_humidity_reading);
-    if (color < LED_COLOR_LAST) {
+    if (color <= HMD_LED_COLOR_MAX) {
         // Update context.
-        hmd_ctx.led_color.temperature_humidity_reading = color;
+        hmd_ctx.configuration.led_color.temperature_humidity_reading = color;
         // Update driver.
         led_status = LED_set_activity_color(LED_ACTIVITY_TEMPERATURE_HUMIDITY_READING, color);
         LED_stack_error(ERROR_BASE_LED);
         // Write new value in NVM.
-        nvm_status = NVM_write_byte(NVM_ADDRESS_LED_COLOR_TEMPERATURE_HUMIDITY_READING, ((uint8_t) color));
+        generic_u8 = (uint8_t) (color + HMD_LED_COLOR_NVM_OFFSET);
+        nvm_status = NVM_write(NVM_ADDRESS_LED_COLOR_TEMPERATURE_HUMIDITY_READING, &generic_u8, 1, NVM_DATA_TYPE_BYTE);
         NVM_stack_error(ERROR_BASE_NVM);
     }
     else {
-        ERROR_stack_add(ERROR_SIGFOX_EP_DL_TEMPERATURE_HUMIDITY_READING_COLOR);
+        ERROR_stack_add(ERROR_SIGFOX_EP_DL_LED_COLOR_TEMPERATURE_HUMIDITY_READING);
+        (*configuration_status) = 0;
     }
 #ifdef HMD_AIR_QUALITY_ENABLE
     // Air quality reading.
     color = (led_color->air_quality_reading);
-    if (color < LED_COLOR_LAST) {
+    if (color <= HMD_LED_COLOR_MAX) {
         // Update context.
-        hmd_ctx.led_color.air_quality_reading = color;
+        hmd_ctx.configuration.led_color.air_quality_reading = color;
         // Update driver.
         led_status = LED_set_activity_color(LED_ACTIVITY_AIR_QUALITY_READING, color);
         LED_stack_error(ERROR_BASE_LED);
         // Write new value in NVM.
-        nvm_status = NVM_write_byte(NVM_ADDRESS_LED_COLOR_AIR_QUALITY_READING, ((uint8_t) color));
+        generic_u8 = (uint8_t) (color + HMD_LED_COLOR_NVM_OFFSET);
+        nvm_status = NVM_write(NVM_ADDRESS_LED_COLOR_AIR_QUALITY_READING, &generic_u8, 1, NVM_DATA_TYPE_BYTE);
         NVM_stack_error(ERROR_BASE_NVM);
     }
     else {
-        ERROR_stack_add(ERROR_SIGFOX_EP_DL_AIR_QUALITY_READING_COLOR);
+        ERROR_stack_add(ERROR_SIGFOX_EP_DL_LED_COLOR_AIR_QUALITY_READING);
+        (*configuration_status) = 0;
     }
 #endif
 #ifdef HMD_ACCELEROMETER_ENABLE
     // Accelerometer reading
     color = (led_color->accelerometer_reading);
-    if (color < LED_COLOR_LAST) {
+    if (color <= HMD_LED_COLOR_MAX) {
         // Update context.
-        hmd_ctx.led_color.accelerometer_reading = color;
+        hmd_ctx.configuration.led_color.accelerometer_reading = color;
         // Update driver.
         led_status = LED_set_activity_color(LED_ACTIVITY_ACCELEROMETER_READING, color);
         LED_stack_error(ERROR_BASE_LED);
         // Write new value in NVM.
-        nvm_status = NVM_write_byte(NVM_ADDRESS_LED_COLOR_ACCELEROMETER_READING, ((uint8_t) color));
+        generic_u8 = (uint8_t) (color + HMD_LED_COLOR_NVM_OFFSET);
+        nvm_status = NVM_write(NVM_ADDRESS_LED_COLOR_ACCELEROMETER_READING, &generic_u8, 1, NVM_DATA_TYPE_BYTE);
         NVM_stack_error(ERROR_BASE_NVM);
     }
     else {
-        ERROR_stack_add(ERROR_SIGFOX_EP_DL_ACCELEROMETER_READING_COLOR);
+        ERROR_stack_add(ERROR_SIGFOX_EP_DL_LED_COLOR_ACCELEROMETER_READING);
+        (*configuration_status) = 0;
     }
 #endif
 }
@@ -478,9 +502,6 @@ static void _HMD_init_context(void) {
     hmd_ctx.accelerometer_state = 0;
     hmd_ctx.accelerometer_last_time_seconds = 0;
 #endif
-    // Load configuration from NVM.
-    _HMD_load_timings();
-    _HMD_load_led_color();
 }
 #endif
 
@@ -496,6 +517,9 @@ static void _HMD_init_hw(void) {
 #endif
 #if ((defined HMD_BUTTON_ENABLE) && !(defined HMD_MODE_CLI))
     BUTTON_status_t button_status = BUTTON_SUCCESS;
+#endif
+#ifndef HMD_MODE_CLI
+    uint8_t unused = 0;
 #endif
     // Init error stack
     ERROR_stack_init();
@@ -537,9 +561,11 @@ static void _HMD_init_hw(void) {
     led_status = LED_init();
     LED_stack_error(ERROR_BASE_LED);
 #ifndef HMD_MODE_CLI
-    // Init device configuration.
-    _HMD_store_timings(&hmd_ctx.timings);
-    _HMD_store_led_color(&hmd_ctx.led_color);
+    // Load configuration from NVM.
+    _HMD_load_timings();
+    _HMD_store_timings(&hmd_ctx.configuration.timings, &unused);
+    _HMD_load_led_color();
+    _HMD_store_led_color(&hmd_ctx.configuration.led_color, &unused);
 #endif
 }
 
@@ -733,6 +759,7 @@ static void _HMD_send_sigfox_message(SIGFOX_EP_API_application_message_t* sigfox
     HMD_led_color_t led_color;
     int16_t dl_rssi = 0;
     uint8_t status = 0;
+    uint8_t configuration_status = 0;
     // Directly exit of the radio is disabled due to low battery voltage.
     if (hmd_ctx.flags.radio_enabled == 0) goto errors;
     // Check downlink request.
@@ -747,6 +774,8 @@ static void _HMD_send_sigfox_message(SIGFOX_EP_API_application_message_t* sigfox
     // Send message.
     sigfox_ep_api_status = SIGFOX_EP_API_send_application_message(sigfox_ep_application_message);
     SIGFOX_EP_API_check_status(0);
+    // Reload watchdog.
+    IWDG_reload();
     // Check bidirectional flag.
     if (hmd_ctx.flags.downlink_request != 0) {
         // Clear request and reset status.
@@ -777,7 +806,7 @@ static void _HMD_send_sigfox_message(SIGFOX_EP_API_application_message_t* sigfox
                     timings.air_quality_period_minutes = dl_payload.set_timings.air_quality_period_minutes;
                     timings.accelerometer_blanking_time_seconds = dl_payload.set_timings.accelerometer_blanking_time_seconds;
                     // Check and store new configuration.
-                    _HMD_store_timings(&timings);
+                    _HMD_store_timings(&timings, &configuration_status);
                     break;
                 case SIGFOX_EP_DL_OP_CODE_SET_LED_COLOR:
                     // Build LED configuration structure.
@@ -787,7 +816,7 @@ static void _HMD_send_sigfox_message(SIGFOX_EP_API_application_message_t* sigfox
                     led_color.air_quality_reading = dl_payload.set_led_color.air_quality_reading;
                     led_color.accelerometer_reading = dl_payload.set_led_color.accelerometer_reading;
                     // Check and store new configuration.
-                    _HMD_store_led_color(&led_color);
+                    _HMD_store_led_color(&led_color, &configuration_status);
                     break;
                 default:
                     ERROR_stack_add(ERROR_SIGFOX_EP_DL_OP_CODE);
@@ -795,6 +824,8 @@ static void _HMD_send_sigfox_message(SIGFOX_EP_API_application_message_t* sigfox
                 }
             }
         }
+        // Update status.
+        hmd_ctx.status.configuration_updated = (configuration_status == 0) ? 0 : 1;
     }
     // Close library.
     sigfox_ep_api_status = SIGFOX_EP_API_close();
@@ -1050,7 +1081,7 @@ int main(void) {
             // Read uptime.
             generic_u32 = RTC_get_uptime_seconds();
             // Periodic monitoring.
-            if (generic_u32 >= (hmd_ctx.monitoring_last_time_seconds + (hmd_ctx.timings.monitoring_period_minutes * 60))) {
+            if (generic_u32 >= (hmd_ctx.monitoring_last_time_seconds + (hmd_ctx.configuration.timings.monitoring_period_minutes * 60))) {
                // Set request and update last time.
                hmd_ctx.flags.monitoring_request = 1;
                hmd_ctx.monitoring_last_time_seconds = generic_u32;
@@ -1067,7 +1098,7 @@ int main(void) {
                hmd_ctx.flags.error_stack_enable = 1;
             }
 #ifdef HMD_AIR_QUALITY_ENABLE
-            if (generic_u32 >= (hmd_ctx.air_quality_last_time_seconds + (hmd_ctx.timings.air_quality_period_minutes * 60))) {
+            if (generic_u32 >= (hmd_ctx.air_quality_last_time_seconds + (hmd_ctx.configuration.timings.air_quality_period_minutes * 60))) {
                // Set request and update last time.
                hmd_ctx.flags.air_quality_request = 1;
                hmd_ctx.air_quality_last_time_seconds = generic_u32;
@@ -1075,7 +1106,7 @@ int main(void) {
 #endif
 #ifdef HMD_ACCELEROMETER_ENABLE
             // Check accelerometer blanking time.
-            if ((generic_u32 >= (hmd_ctx.accelerometer_last_time_seconds + hmd_ctx.timings.accelerometer_blanking_time_seconds)) && (hmd_ctx.accelerometer_state == 0)) {
+            if ((generic_u32 >= (hmd_ctx.accelerometer_last_time_seconds + hmd_ctx.configuration.timings.accelerometer_blanking_time_seconds)) && (hmd_ctx.accelerometer_state == 0)) {
                 // Turn sensors on.
                 LED_set_activity(LED_ACTIVITY_ACCELEROMETER_READING);
                 POWER_enable(POWER_REQUESTER_ID_MAIN, POWER_DOMAIN_SENSORS, LPTIM_DELAY_MODE_SLEEP);

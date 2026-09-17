@@ -304,7 +304,7 @@ static AT_status_t _CLI_rcc_callback(void) {
         AT_reply_add_string((clock_status == 0) ? ":OFF:" : ":ON:");
         AT_reply_add_integer((int32_t) clock_frequency, STRING_FORMAT_DECIMAL, 0);
         AT_reply_add_string("Hz");
-        AT_send_reply();
+        AT_reply_send();
     }
 errors:
     return status;
@@ -315,15 +315,13 @@ static AT_status_t _CLI_get_ep_id_callback(void) {
     // Local variables.
     AT_status_t status = AT_SUCCESS;
     NVM_status_t nvm_status = NVM_SUCCESS;
-    uint8_t idx = 0;
-    uint8_t id_byte = 0;
+    uint8_t sigfox_ep_id[SIGFOX_EP_ID_SIZE_BYTES];
     // Retrieve device ID in NVM.
-    for (idx = 0; idx < SIGFOX_EP_ID_SIZE_BYTES; idx++) {
-        nvm_status = NVM_read_byte((NVM_ADDRESS_SIGFOX_EP_ID + idx), &id_byte);
-        _CLI_check_driver_status(nvm_status, NVM_SUCCESS, ERROR_BASE_NVM);
-        AT_reply_add_integer(id_byte, STRING_FORMAT_HEXADECIMAL, 0);
-    }
-    AT_send_reply();
+    nvm_status = NVM_read(NVM_ADDRESS_SIGFOX_EP_ID, sigfox_ep_id, SIGFOX_EP_ID_SIZE_BYTES, NVM_DATA_TYPE_BYTE);
+    _CLI_check_driver_status(nvm_status, NVM_SUCCESS, ERROR_BASE_NVM);
+    // Print device ID.
+    AT_reply_add_byte_array(sigfox_ep_id, SIGFOX_EP_ID_SIZE_BYTES, 0);
+    AT_reply_send();
 errors:
     return status;
 }
@@ -336,15 +334,12 @@ static AT_status_t _CLI_set_ep_id_callback(void) {
     NVM_status_t nvm_status = NVM_SUCCESS;
     uint8_t sigfox_ep_id[SIGFOX_EP_ID_SIZE_BYTES];
     uint32_t unused = 0;
-    uint8_t idx = 0;
     // Read ID parameter.
     parser_status = PARSER_get_byte_array(cli_ctx.at_parser_ptr, STRING_CHAR_NULL, SIGFOX_EP_ID_SIZE_BYTES, 1, sigfox_ep_id, &unused);
     PARSER_exit_error(AT_ERROR_BASE_PARSER);
     // Write device ID in NVM.
-    for (idx = 0; idx < SIGFOX_EP_ID_SIZE_BYTES; idx++) {
-        nvm_status = NVM_write_byte((NVM_ADDRESS_SIGFOX_EP_ID + idx), sigfox_ep_id[idx]);
-        _CLI_check_driver_status(nvm_status, NVM_SUCCESS, ERROR_BASE_NVM);
-    }
+    nvm_status = NVM_write(NVM_ADDRESS_SIGFOX_EP_ID, sigfox_ep_id, SIGFOX_EP_ID_SIZE_BYTES, NVM_DATA_TYPE_BYTE);
+    _CLI_check_driver_status(nvm_status, NVM_SUCCESS, ERROR_BASE_NVM);
 errors:
     return status;
 }
@@ -354,15 +349,13 @@ static AT_status_t _CLI_get_ep_key_callback(void) {
     // Local variables.
     AT_status_t status = AT_SUCCESS;
     NVM_status_t nvm_status = NVM_SUCCESS;
-    uint8_t idx = 0;
-    uint8_t key_byte = 0;
+    uint8_t sigfox_ep_key[SIGFOX_EP_KEY_SIZE_BYTES];
     // Retrieve device key in NVM.
-    for (idx = 0; idx < SIGFOX_EP_KEY_SIZE_BYTES; idx++) {
-        nvm_status = NVM_read_byte((NVM_ADDRESS_SIGFOX_EP_KEY + idx), &key_byte);
-        _CLI_check_driver_status(nvm_status, NVM_SUCCESS, ERROR_BASE_NVM);
-        AT_reply_add_integer(key_byte, STRING_FORMAT_HEXADECIMAL, 0);
-    }
-    AT_send_reply();
+    nvm_status = NVM_read(NVM_ADDRESS_SIGFOX_EP_KEY, sigfox_ep_key, SIGFOX_EP_KEY_SIZE_BYTES, NVM_DATA_TYPE_BYTE);
+    _CLI_check_driver_status(nvm_status, NVM_SUCCESS, ERROR_BASE_NVM);
+    // Print device key.
+    AT_reply_add_byte_array(sigfox_ep_key, SIGFOX_EP_KEY_SIZE_BYTES, 0);
+    AT_reply_send();
 errors:
     return status;
 }
@@ -375,15 +368,12 @@ static AT_status_t _CLI_set_ep_key_callback(void) {
     NVM_status_t nvm_status = NVM_SUCCESS;
     uint8_t sigfox_ep_key[SIGFOX_EP_KEY_SIZE_BYTES];
     uint32_t unused = 0;
-    uint8_t idx = 0;
     // Read key parameter.
     parser_status = PARSER_get_byte_array(cli_ctx.at_parser_ptr, STRING_CHAR_NULL, SIGFOX_EP_KEY_SIZE_BYTES, 1, sigfox_ep_key, &unused);
     PARSER_exit_error(AT_ERROR_BASE_PARSER);
-    // Write device ID in NVM.
-    for (idx = 0; idx < SIGFOX_EP_KEY_SIZE_BYTES; idx++) {
-        nvm_status = NVM_write_byte((NVM_ADDRESS_SIGFOX_EP_KEY + idx), sigfox_ep_key[idx]);
-        _CLI_check_driver_status(nvm_status, NVM_SUCCESS, ERROR_BASE_NVM);
-    }
+    // Write device key in NVM.
+    nvm_status = NVM_write(NVM_ADDRESS_SIGFOX_EP_KEY, sigfox_ep_key, SIGFOX_EP_KEY_SIZE_BYTES, NVM_DATA_TYPE_BYTE);
+    _CLI_check_driver_status(nvm_status, NVM_SUCCESS, ERROR_BASE_NVM);
 errors:
     return status;
 }
@@ -402,21 +392,21 @@ static AT_status_t _CLI_adc_callback(void) {
     AT_reply_add_string("mcu_voltage=");
     AT_reply_add_integer(generic_s32, STRING_FORMAT_DECIMAL, 0);
     AT_reply_add_string("mV");
-    AT_send_reply();
+    AT_reply_send();
     // MCU temperature.
     analog_status = ANALOG_convert_channel(ANALOG_CHANNEL_MCU_TEMPERATURE_DEGREES, &generic_s32);
     _CLI_check_driver_status(analog_status, ANALOG_SUCCESS, ERROR_BASE_ANALOG);
     AT_reply_add_string("mcu_temperature=");
     AT_reply_add_integer(generic_s32, STRING_FORMAT_DECIMAL, 0);
     AT_reply_add_string("dC");
-    AT_send_reply();
+    AT_reply_send();
     // Source voltage.
     AT_reply_add_string("storage_voltage=");
     analog_status = ANALOG_convert_channel(ANALOG_CHANNEL_STORAGE_VOLTAGE_MV, &generic_s32);
     _CLI_check_driver_status(analog_status, ANALOG_SUCCESS, ERROR_BASE_ANALOG);
     AT_reply_add_integer(generic_s32, STRING_FORMAT_DECIMAL, 0);
     AT_reply_add_string("mV");
-    AT_send_reply();
+    AT_reply_send();
 errors:
     POWER_disable(POWER_REQUESTER_ID_CLI, POWER_DOMAIN_ANALOG);
     return status;
@@ -451,7 +441,7 @@ static AT_status_t _CLI_ths_callback(void) {
     // Humidity.
     AT_reply_add_integer(humidity_percent, STRING_FORMAT_DECIMAL, 0);
     AT_reply_add_string("%");
-    AT_send_reply();
+    AT_reply_send();
 #endif
 #ifdef HMD_TEMPERATURE_HUMIDITY_SHT3X_ENABLE
     // Perform measurements.
@@ -465,7 +455,7 @@ static AT_status_t _CLI_ths_callback(void) {
     // Humidity.
     AT_reply_add_integer(humidity_percent, STRING_FORMAT_DECIMAL, 0);
     AT_reply_add_string("%");
-    AT_send_reply();
+    AT_reply_send();
 #endif
 errors:
     POWER_disable(POWER_REQUESTER_ID_CLI, POWER_DOMAIN_SENSORS);
@@ -560,11 +550,11 @@ static AT_status_t _CLI_aqs_status_callback(void) {
     AT_reply_add_string(" (validity_flag=");
     AT_reply_add_integer((ens160_device_status.validity_flag), STRING_FORMAT_DECIMAL, 0);
     AT_reply_add_string(")");
-    AT_send_reply();
+    AT_reply_send();
     AT_reply_add_string("operating_time=");
     AT_reply_add_integer(cli_ctx.aqs_operating_time, STRING_FORMAT_DECIMAL, 0);
     AT_reply_add_string("s.");
-    AT_send_reply();
+    AT_reply_send();
 errors:
     return status;
 }
@@ -589,22 +579,22 @@ static AT_status_t _CLI_aqs_read_callback(void) {
     // Air quality index.
     AT_reply_add_string("AQI_UBA=");
     AT_reply_add_integer((air_quality_data.aqi_uba), STRING_FORMAT_DECIMAL, 0);
-    AT_send_reply();
+    AT_reply_send();
 #ifdef ENS16X_DRIVER_DEVICE_ENS161
     AT_reply_add_string("AQI_S=");
     AT_reply_add_integer((air_quality_data.aqi_s), STRING_FORMAT_DECIMAL, 0);
-    AT_send_reply();
+    AT_reply_send();
 #endif
     // TVOC.
     AT_reply_add_string("TVOC=");
     AT_reply_add_integer((air_quality_data.tvoc_ppb), STRING_FORMAT_DECIMAL, 0);
     AT_reply_add_string("ppb");
-    AT_send_reply();
+    AT_reply_send();
     // ECO2.
     AT_reply_add_string("ECO2=");
     AT_reply_add_integer((air_quality_data.eco2_ppm), STRING_FORMAT_DECIMAL, 0);
     AT_reply_add_string("ppm");
-    AT_send_reply();
+    AT_reply_send();
 errors:
     return status;
 }
@@ -625,7 +615,7 @@ static AT_status_t _CLI_acc_read_callback(void) {
     // Print
     AT_reply_add_string("FXLS8974CF chip_id=");
     AT_reply_add_integer(chip_id, STRING_FORMAT_HEXADECIMAL, 1);
-    AT_send_reply();
+    AT_reply_send();
 errors:
     POWER_disable(POWER_REQUESTER_ID_CLI, POWER_DOMAIN_SENSORS);
     return status;
@@ -682,7 +672,7 @@ static void _CLI_print_dl_payload(sfx_u8* dl_payload, sfx_u8 dl_payload_size, sf
     AT_reply_add_string(":");
     AT_reply_add_integer(rssi_dbm, STRING_FORMAT_DECIMAL, 0);
     AT_reply_add_string("dBm");
-    AT_send_reply();
+    AT_reply_send();
 }
 #endif
 
@@ -700,7 +690,7 @@ static AT_status_t _CLI_read_print_dl_payload(void) {
     // Check downlink status.
     if (message_status.field.dl_frame == 0) {
         AT_reply_add_string("+RX=timeout");
-        AT_send_reply();
+        AT_reply_send();
     }
     else {
         // Read downlink payload.
@@ -1019,7 +1009,7 @@ static AT_status_t _CLI_rssi_callback(void) {
         // Print RSSI.
         AT_reply_add_integer(rssi_dbm, STRING_FORMAT_DECIMAL, 0);
         AT_reply_add_string("dBm");
-        AT_send_reply();
+        AT_reply_send();
         // Report delay.
         lptim_status = LPTIM_delay_milliseconds(CLI_RSSI_REPORT_PERIOD_MS, LPTIM_DELAY_MODE_ACTIVE);
         _CLI_check_driver_status(lptim_status, LPTIM_SUCCESS, ERROR_BASE_LPTIM);
