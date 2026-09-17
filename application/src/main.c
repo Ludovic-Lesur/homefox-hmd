@@ -68,6 +68,7 @@
 #define HMD_AIR_QUALITY_ACQUISITION_MODE                    ENS16X_OPERATING_MODE_STANDARD
 #endif
 // Accelerometer.
+#define HMD_ACCELEROMETER_BLANKING_TIME_SECONDS_MIN         30
 #define HMD_ACCELEROMETER_BLANKING_TIME_SECONDS_DEFAULT     MATH_SECONDS_PER_MINUTE
 #define HMD_ACCELEROMETER_BLANKING_TIME_SECONDS_MAX         (6 * MATH_SECONDS_PER_HOUR)
 // LED color.
@@ -158,9 +159,11 @@ typedef struct {
     uint16_t storage_voltage_mv;
     uint16_t temperature_tenth_degrees;
     uint8_t humidity_percent;
-    // Downlink.
-    uint32_t configuration_last_time_seconds;
+    // Configuration.
     HMD_configuration_t configuration;
+#ifdef SIGFOX_EP_BIDIRECTIONAL
+    uint32_t configuration_last_time_seconds;
+#endif
     // Error stack.
     uint32_t error_stack_last_time_seconds;
 #ifdef HMD_AIR_QUALITY_ENABLE
@@ -203,7 +206,7 @@ static void _HMD_button_irq_callback(void) {
 }
 #endif
 
-#ifndef HMD_MODE_CLI
+#if (!(defined HMD_MODE_CLI) && (defined SIGFOX_EP_BIDIRECTIONAL))
 /*******************************************************************/
 static void _HMD_load_timings(void) {
     // Local variables.
@@ -238,7 +241,7 @@ static void _HMD_load_timings(void) {
     nvm_status = NVM_read(NVM_ADDRESS_ACCELEROMETER_BLANKING_TIME_SECONDS, &nvm_short, 1, NVM_DATA_TYPE_SHORT);
     NVM_stack_error(ERROR_BASE_NVM);
     // Check value.
-    if (nvm_short > HMD_ACCELEROMETER_BLANKING_TIME_SECONDS_MAX) {
+    if ((nvm_short < HMD_ACCELEROMETER_BLANKING_TIME_SECONDS_MIN) || (nvm_short > HMD_ACCELEROMETER_BLANKING_TIME_SECONDS_MAX)) {
        // Reset to default value.
         nvm_short = HMD_ACCELEROMETER_BLANKING_TIME_SECONDS_DEFAULT;
         ERROR_stack_add(ERROR_NVM_ACCELEROMETER_BLANKING_TIME);
@@ -248,7 +251,7 @@ static void _HMD_load_timings(void) {
 }
 #endif
 
-#ifndef HMD_MODE_CLI
+#if (!(defined HMD_MODE_CLI) && (defined SIGFOX_EP_BIDIRECTIONAL))
 /*******************************************************************/
 static void _HMD_store_timings(HMD_timings_t* timings, uint8_t* configuration_status) {
     // Local variables.
@@ -287,7 +290,7 @@ static void _HMD_store_timings(HMD_timings_t* timings, uint8_t* configuration_st
 #ifdef HMD_ACCELEROMETER_ENABLE
     // Accelerometer blanking time.
     generic_u16 = (timings->accelerometer_blanking_time_seconds);
-    if (generic_u16 <= HMD_ACCELEROMETER_BLANKING_TIME_SECONDS_MAX) {
+    if ((generic_u16 >= HMD_ACCELEROMETER_BLANKING_TIME_SECONDS_MIN) || (generic_u16 <= HMD_ACCELEROMETER_BLANKING_TIME_SECONDS_MAX)) {
         // Update context.
         hmd_ctx.configuration.timings.accelerometer_blanking_time_seconds = generic_u16;
         // Write new value in NVM.
@@ -302,7 +305,7 @@ static void _HMD_store_timings(HMD_timings_t* timings, uint8_t* configuration_st
 }
 #endif
 
-#ifndef HMD_MODE_CLI
+#if (!(defined HMD_MODE_CLI) && (defined SIGFOX_EP_BIDIRECTIONAL))
 /*******************************************************************/
 static void _HMD_load_led_color(void) {
     // Local variables.
@@ -369,7 +372,7 @@ static void _HMD_load_led_color(void) {
 }
 #endif
 
-#ifndef HMD_MODE_CLI
+#if (!(defined HMD_MODE_CLI) && (defined SIGFOX_EP_BIDIRECTIONAL))
 /*******************************************************************/
 static void _HMD_store_led_color(HMD_led_color_t* led_color, uint8_t* configuration_status) {
     // Local variables.
@@ -482,7 +485,6 @@ static void _HMD_init_context(void) {
     hmd_ctx.flags.configuration_request = 1;
     hmd_ctx.flags.error_stack_enable = 1;
     hmd_ctx.monitoring_last_time_seconds = 0;
-    hmd_ctx.configuration_last_time_seconds = 0;
     hmd_ctx.error_stack_last_time_seconds = 0;
     hmd_ctx.storage_voltage_mv = SIGFOX_EP_ERROR_VALUE_STORAGE_VOLTAGE;
     hmd_ctx.temperature_tenth_degrees = SIGFOX_EP_ERROR_VALUE_TEMPERATURE;
@@ -502,6 +504,18 @@ static void _HMD_init_context(void) {
     hmd_ctx.accelerometer_state = 0;
     hmd_ctx.accelerometer_last_time_seconds = 0;
 #endif
+#ifdef SIGFOX_EP_BIDIRECTIONAL
+    hmd_ctx.configuration_last_time_seconds = 0;
+#else
+    hmd_ctx.configuration.timings.monitoring_period_minutes = HMD_MONITORING_PERIOD_MINUTES_DEFAULT;
+    hmd_ctx.configuration.timings.air_quality_period_minutes = HMD_AIR_QUALITY_PERIOD_MINUTES_DEFAULT;
+    hmd_ctx.configuration.timings.accelerometer_blanking_time_seconds = HMD_ACCELEROMETER_BLANKING_TIME_SECONDS_DEFAULT;
+    hmd_ctx.configuration.led_color.sigfox_uplink = LED_COLOR_BLUE;
+    hmd_ctx.configuration.led_color.sigfox_downlink = LED_COLOR_CYAN;
+    hmd_ctx.configuration.led_color.temperature_humidity_reading = LED_COLOR_GREEN;
+    hmd_ctx.configuration.led_color.air_quality_reading = LED_COLOR_YELLOW;
+    hmd_ctx.configuration.led_color.accelerometer_reading = LED_COLOR_MAGENTA;
+#endif
 }
 #endif
 
@@ -518,7 +532,7 @@ static void _HMD_init_hw(void) {
 #if ((defined HMD_BUTTON_ENABLE) && !(defined HMD_MODE_CLI))
     BUTTON_status_t button_status = BUTTON_SUCCESS;
 #endif
-#ifndef HMD_MODE_CLI
+#if (!(defined HMD_MODE_CLI) && (defined SIGFOX_EP_BIDIRECTIONAL))
     uint8_t unused = 0;
 #endif
     // Init error stack
@@ -560,7 +574,7 @@ static void _HMD_init_hw(void) {
 #endif
     led_status = LED_init();
     LED_stack_error(ERROR_BASE_LED);
-#ifndef HMD_MODE_CLI
+#if (!(defined HMD_MODE_CLI) && (defined SIGFOX_EP_BIDIRECTIONAL))
     // Load configuration from NVM.
     _HMD_load_timings();
     _HMD_store_timings(&hmd_ctx.configuration.timings, &unused);
@@ -753,17 +767,21 @@ static void _HMD_send_sigfox_message(SIGFOX_EP_API_application_message_t* sigfox
     // Local variables.
     SIGFOX_EP_API_status_t sigfox_ep_api_status = SIGFOX_EP_API_SUCCESS;
     SIGFOX_EP_API_config_t lib_config;
+    uint8_t status = 0;
+#ifdef SIGFOX_EP_BIDIRECTIONAL
     SIGFOX_EP_API_message_status_t message_status;
     SIGFOX_EP_dl_payload_t dl_payload;
     HMD_timings_t timings;
     HMD_led_color_t led_color;
     int16_t dl_rssi = 0;
-    uint8_t status = 0;
     uint8_t configuration_status = 0;
+#endif
     // Directly exit of the radio is disabled due to low battery voltage.
     if (hmd_ctx.flags.radio_enabled == 0) goto errors;
+#ifdef SIGFOX_EP_BIDIRECTIONAL
     // Check configuration request.
     (sigfox_ep_application_message->bidirectional_flag) = ((hmd_ctx.flags.configuration_request != 0) ? SIGFOX_TRUE : SIGFOX_FALSE);
+#endif
     // Library configuration.
     lib_config.rc = &SIGFOX_RC1;
     // Reload watchdog.
@@ -776,6 +794,7 @@ static void _HMD_send_sigfox_message(SIGFOX_EP_API_application_message_t* sigfox
     SIGFOX_EP_API_check_status(0);
     // Reload watchdog.
     IWDG_reload();
+#ifdef SIGFOX_EP_BIDIRECTIONAL
     // Check bidirectional flag.
     if (hmd_ctx.flags.configuration_request != 0) {
         // Clear request and reset status.
@@ -827,6 +846,7 @@ static void _HMD_send_sigfox_message(SIGFOX_EP_API_application_message_t* sigfox
         // Update status.
         hmd_ctx.status.configuration_updated = (configuration_status == 0) ? 0 : 1;
     }
+#endif
     // Close library.
     sigfox_ep_api_status = SIGFOX_EP_API_close();
     SIGFOX_EP_API_check_status(0);
@@ -874,9 +894,11 @@ int main(void) {
     sigfox_ep_application_message.common_parameters.number_of_frames = 3;
     sigfox_ep_application_message.common_parameters.ul_bit_rate = SIGFOX_UL_BIT_RATE_100BPS;
     sigfox_ep_application_message.type = SIGFOX_APPLICATION_MESSAGE_TYPE_BYTE_ARRAY;
-    sigfox_ep_application_message.bidirectional_flag = SIGFOX_FALSE;
     sigfox_ep_application_message.ul_payload = SIGFOX_NULL;
     sigfox_ep_application_message.ul_payload_size_bytes = 0;
+#ifdef SIGFOX_EP_BIDIRECTIONAL
+    sigfox_ep_application_message.bidirectional_flag = SIGFOX_FALSE;
+#endif
     // Main loop.
     while (1) {
         // Perform state machine.
@@ -1086,12 +1108,14 @@ int main(void) {
                hmd_ctx.flags.monitoring_request = 1;
                hmd_ctx.monitoring_last_time_seconds = generic_u32;
             }
+#ifdef SIGFOX_EP_BIDIRECTIONAL
             // Periodic configuration.
             if (generic_u32 >= (hmd_ctx.configuration_last_time_seconds + HMD_CONFIGURATION_PERIOD_SECONDS)) {
                // Set request and update last time.
                hmd_ctx.flags.configuration_request = 1;
                hmd_ctx.configuration_last_time_seconds = generic_u32;
             }
+#endif
             // Error stack.
             if (generic_u32 >= (hmd_ctx.error_stack_last_time_seconds + HMD_ERROR_STACK_BLANKING_TIME_SECONDS)) {
                // Enable error stack message.

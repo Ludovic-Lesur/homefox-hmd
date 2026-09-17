@@ -102,6 +102,7 @@ typedef union {
 } SIGFOX_EP_ul_payload_accelerometer_t;
 #endif
 
+#ifdef SIGFOX_EP_BIDIRECTIONAL
 /*!******************************************************************
  * \enum SIGFOX_EP_dl_op_code_t
  * \brief Sigfox downlink operation codes.
@@ -113,7 +114,9 @@ typedef enum {
     SIGFOX_EP_DL_OP_CODE_SET_LED_COLOR,
     SIGFOX_EP_DL_OP_CODE_LAST
 } SIGFOX_EP_dl_op_code_t;
+#endif
 
+#ifdef SIGFOX_EP_BIDIRECTIONAL
 /*!******************************************************************
  * \enum SIGFOX_EP_dl_payload_t
  * \brief Sigfox downlink frames format.
@@ -140,5 +143,6 @@ typedef union {
         };
     } __attribute__((scalar_storage_order("big-endian"))) __attribute__((packed));
 } SIGFOX_EP_dl_payload_t;
+#endif
 
 #endif /* __SIGFOX_EP_FRAMES_H__ */
