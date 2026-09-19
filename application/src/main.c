@@ -43,11 +43,11 @@
 // Monitoring period.
 #define HMD_MONITORING_PERIOD_MINUTES_MIN                   10
 #define HMD_MONITORING_PERIOD_MINUTES_DEFAULT               30
-#define HMD_MONITORING_PERIOD_MINUTES_MAX                   MATH_MINUTES_PER_WEEK
+#define HMD_MONITORING_PERIOD_MINUTES_MAX                   (1 * MATH_MINUTES_PER_WEEK)
 // Downlink period.
-#define HMD_CONFIGURATION_PERIOD_SECONDS                    (MATH_SECONDS_PER_DAY + MATH_SECONDS_PER_HOUR)
+#define HMD_CONFIGURATION_PERIOD_SECONDS                    (25 * MATH_SECONDS_PER_HOUR)
 // Error stack.
-#define HMD_ERROR_STACK_BLANKING_TIME_SECONDS               MATH_SECONDS_PER_DAY
+#define HMD_ERROR_STACK_BLANKING_TIME_SECONDS               (1 * MATH_SECONDS_PER_DAY)
 // Voltage hysteresis for radio.
 #define HMD_RADIO_ON_STORAGE_VOLTAGE_THRESHOLD_MV           3700
 #define HMD_RADIO_OFF_STORAGE_VOLTAGE_THRESHOLD_MV          3500
@@ -57,7 +57,7 @@
 // Air quality.
 #define HMD_AIR_QUALITY_PERIOD_MINUTES_MIN                  10
 #define HMD_AIR_QUALITY_PERIOD_MINUTES_DEFAULT              30
-#define HMD_AIR_QUALITY_PERIOD_MINUTES_MAX                  MATH_MINUTES_PER_WEEK
+#define HMD_AIR_QUALITY_PERIOD_MINUTES_MAX                  (1 * MATH_MINUTES_PER_WEEK)
 #define HMD_AIR_QUALITY_ACQUISITION_DELAY_MS                10000
 #define HMD_AIR_QUALITY_ACQUISITION_LED_BLINK_MS            100
 #define HMD_AIR_QUALITY_ACQUISITION_TIME_MIN_MS             120000
@@ -69,10 +69,10 @@
 #endif
 // Accelerometer.
 #define HMD_ACCELEROMETER_BLANKING_TIME_SECONDS_MIN         30
-#define HMD_ACCELEROMETER_BLANKING_TIME_SECONDS_DEFAULT     MATH_SECONDS_PER_MINUTE
+#define HMD_ACCELEROMETER_BLANKING_TIME_SECONDS_DEFAULT     (1 * MATH_SECONDS_PER_MINUTE)
 #define HMD_ACCELEROMETER_BLANKING_TIME_SECONDS_MAX         (6 * MATH_SECONDS_PER_HOUR)
 // LED color.
-#define HMD_LED_COLOR_MIN                                   LED_COLOR_OFF
+#define HMD_LED_COLOR_MIN                                   (LED_COLOR_OFF)
 #define HMD_LED_COLOR_MAX                                   (LED_COLOR_LAST - 1)
 #define HMD_LED_COLOR_NVM_OFFSET                            0x55
 
@@ -1103,7 +1103,7 @@ int main(void) {
             // Read uptime.
             generic_u32 = RTC_get_uptime_seconds();
             // Periodic monitoring.
-            if (generic_u32 >= (hmd_ctx.monitoring_last_time_seconds + (hmd_ctx.configuration.timings.monitoring_period_minutes * 60))) {
+            if (generic_u32 >= (hmd_ctx.monitoring_last_time_seconds + (hmd_ctx.configuration.timings.monitoring_period_minutes * MATH_SECONDS_PER_MINUTE))) {
                // Set request and update last time.
                hmd_ctx.flags.monitoring_request = 1;
                hmd_ctx.monitoring_last_time_seconds = generic_u32;
@@ -1122,7 +1122,7 @@ int main(void) {
                hmd_ctx.flags.error_stack_enable = 1;
             }
 #ifdef HMD_AIR_QUALITY_ENABLE
-            if (generic_u32 >= (hmd_ctx.air_quality_last_time_seconds + (hmd_ctx.configuration.timings.air_quality_period_minutes * 60))) {
+            if (generic_u32 >= (hmd_ctx.air_quality_last_time_seconds + (hmd_ctx.configuration.timings.air_quality_period_minutes * MATH_SECONDS_PER_MINUTE))) {
                // Set request and update last time.
                hmd_ctx.flags.air_quality_request = 1;
                hmd_ctx.air_quality_last_time_seconds = generic_u32;
